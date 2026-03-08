@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { InferenceClient } from "@huggingface/inference";
+
 dotenv.config();
 
 const app = express();
@@ -14,97 +16,36 @@ app.use(cors({
 
 app.use(express.json());
 
-app.post("/generate", async (req, res) => {
-    try {
-        const { prompt } = req.body;import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-dotenv.config();
-
-const app = express();
-
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://rp-vision-ai.vercel.app"
-  ]
-}));
-
-app.use(express.json());
+const client = new InferenceClient(process.env.HF_API_KEY);
 
 app.post("/generate", async (req, res) => {
-    try {
-        const { prompt } = req.body;
-        console.log("Generating for prompt:", prompt);
+  try {
+    const { prompt } = req.body;
+    console.log("Generating image for:", prompt);
 
-        const response = await fetch(
-            "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0",
-            {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${process.env.HF_API_KEY}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ inputs: prompt })
-            }
-        );
+    const imageBlob = await client.textToImage({
+      model: "stabilityai/stable-diffusion-xl-base-1.0",
+      inputs: prompt,
+      parameters: {
+        num_inference_steps: 30,
+        width: 1024,
+        height: 1024,
+      },
+      provider: "hf-inference",
+    });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.log("HF Error:", errText);
-            return res.status(500).send(errText);
-        }
+    const arrayBuffer = await imageBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader("Content-Type", "image/png");
-        res.send(buffer);
+    res.setHeader("Content-Type", "image/png");
+    res.send(buffer);
 
-    } catch (err) {
-        console.error("Server Error:", err);
-        res.status(500).send("Backend error");
-    }
+  } catch (err) {
+    console.error("Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(5000, () => {
-    console.log("Server running on port 5000");
-});
-
-        const response = await fetch(
-            "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0/v1/images/generations",
-            {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${process.env.HF_API_KEY}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    n: 1,
-                    size: "1024x1024",
-                    response_format: "b64_json"
-                })
-            }
-        );
-
-        if (!response.ok) {
-            const errText = await response.text();
-            console.log("HF Error:", errText);
-            return res.status(500).send(errText);
-        }
-
-        const data = await response.json();
-        const base64 = data.data[0].b64_json;
-        const buffer = Buffer.from(base64, "base64");
-
-        res.setHeader("Content-Type", "image/png");
-        res.send(buffer);
-
-    } catch (err) {
-        console.error("Server Error:", err);
-        res.status(500).send("Backend error");
-    }
-});
-
-app.listen(5000, () => {
-    console.log("Server running on port 5000");
+  console.log("Server running on port 5000");
 });
