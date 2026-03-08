@@ -85,7 +85,8 @@ const generate = useCallback(async () => {
     const fullPrompt = [prompt.trim(), style].filter(Boolean).join(", ");
 
     try {
-      const res = await fetch("https://YOUR-RENDER-URL.onrender.com/generate", {
+      // Should look like this - NOT localhost
+const res = await fetch("https://rp-vision-backend.onrender.com/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: fullPrompt }),
