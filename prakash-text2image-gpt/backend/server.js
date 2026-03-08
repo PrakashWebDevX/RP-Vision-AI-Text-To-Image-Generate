@@ -5,7 +5,12 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://your-app-name.vercel.app"
+  ]
+}));
 app.use(express.json());
 
 app.post("/generate", async (req, res) => {
