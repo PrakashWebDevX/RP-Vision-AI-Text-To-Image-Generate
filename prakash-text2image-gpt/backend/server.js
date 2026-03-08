@@ -19,15 +19,19 @@ app.post("/generate", async (req, res) => {
         const { prompt } = req.body;
 
         const response = await fetch(
-            "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+            "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0/v1/images/generations",
             {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${process.env.HF_API_KEY}`,
-                    "Content-Type": "application/json",
-                    "x-wait-for-model": "true"
+                    "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ inputs: prompt })
+                body: JSON.stringify({
+                    prompt: prompt,
+                    n: 1,
+                    size: "1024x1024",
+                    response_format: "b64_json"
+                })
             }
         );
 
@@ -37,7 +41,10 @@ app.post("/generate", async (req, res) => {
             return res.status(500).send(errText);
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
+        const data = await response.json();
+        const base64 = data.data[0].b64_json;
+        const buffer = Buffer.from(base64, "base64");
+
         res.setHeader("Content-Type", "image/png");
         res.send(buffer);
 
