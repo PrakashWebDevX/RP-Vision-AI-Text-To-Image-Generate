@@ -43,6 +43,9 @@ app.post("/generate", async (req, res) => {
     }
 });
 
-app.listen(5000, () => {
-    console.log("Server running on port 5000");
-});
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://rp-vision-ai.vercel.app"
+  ]
+}));
