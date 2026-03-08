@@ -1,9 +1,5 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import { InferenceClient } from "@huggingface/inference";
-
-dotenv.config();
 
 const app = express();
 
@@ -16,28 +12,24 @@ app.use(cors({
 
 app.use(express.json());
 
-const client = new InferenceClient(process.env.HF_API_KEY);
-
 app.post("/generate", async (req, res) => {
   try {
     const { prompt } = req.body;
     console.log("Generating image for:", prompt);
 
-    const imageBlob = await client.textToImage({
-      model: "stabilityai/stable-diffusion-2-1",
-      inputs: prompt,
-      provider: "hf-inference",
-      parameters: {
-        num_inference_steps: 30,
-        width: 768,
-        height: 768,
-      },
-    });
+    const encodedPrompt = encodeURIComponent(prompt);
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&enhance=true`;
 
-    const arrayBuffer = await imageBlob.arrayBuffer();
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("Pollinations API failed: " + response.status);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Type", "image/jpeg");
     res.send(buffer);
 
   } catch (err) {
