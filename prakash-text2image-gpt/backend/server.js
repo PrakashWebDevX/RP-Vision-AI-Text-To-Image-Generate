@@ -24,14 +24,13 @@ app.post("/generate", async (req, res) => {
     console.log("Generating image for:", prompt);
 
     const imageBlob = await client.textToImage({
-      model: "stabilityai/stable-diffusion-xl-base-1.0",
+      model: "black-forest-labs/FLUX.1-dev",
       inputs: prompt,
       parameters: {
-        num_inference_steps: 30,
+        num_inference_steps: 28,
         width: 1024,
         height: 1024,
       },
-      provider: "hf-inference",
     });
 
     const arrayBuffer = await imageBlob.arrayBuffer();
