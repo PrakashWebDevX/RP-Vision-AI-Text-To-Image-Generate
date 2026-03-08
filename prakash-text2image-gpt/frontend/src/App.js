@@ -73,23 +73,22 @@ export default function App() {
     setTimeout(() => setProgress(0), 500);
   };
 
-  const buildFullPrompt = () => {
-    const style = selectedStyle !== null ? STYLE_PRESETS[selectedStyle].tag : "";
-    return [prompt.trim(), style].filter(Boolean).join(", ");
-  };
-
-  const generate = useCallback(async () => {
+const generate = useCallback(async () => {
     if (!prompt.trim() || loading) return;
     setError(null);
     setLoading(true);
     startProgress();
     if (isMobile) setMobileTab("result");
 
+    // Build prompt inline instead of calling buildFullPrompt
+    const style = selectedStyle !== null ? STYLE_PRESETS[selectedStyle].tag : "";
+    const fullPrompt = [prompt.trim(), style].filter(Boolean).join(", ");
+
     try {
-      const res = await fetch("https://rp-vision-backend.onrender.com", {
+      const res = await fetch("https://YOUR-RENDER-URL.onrender.com/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: buildFullPrompt() }),
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
       if (!res.ok) throw new Error("Generation failed. Check your backend.");
       const blob = await res.blob();
