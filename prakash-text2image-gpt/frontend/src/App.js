@@ -392,9 +392,9 @@ function LoginScreen({ onLogin }) {
 
               <div className="rp-terms">
                 By continuing, you agree to our{" "}
-                <button className="rp-terms-btn" onClick={() => {}}>Terms of Service</button>
+                <button className="rp-terms-btn" onClick={() => { }}>Terms of Service</button>
                 {" "}&amp;{" "}
-                <button className="rp-terms-btn" onClick={() => {}}>Privacy Policy</button>
+                <button className="rp-terms-btn" onClick={() => { }}>Privacy Policy</button>
               </div>
             </div>
           </div>
@@ -838,7 +838,7 @@ export default function App() {
       <div className="app">
         <aside className={"sidebar" + (sidebarOpen ? " open" : "")}>
           <div className="sidebar-brand">
-            <span className="brand-icon">⬡</span>
+            <img src="/logo192.png" alt="RP Vision AI" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6, filter: "drop-shadow(0 0 6px rgba(232,193,74,0.5))" }} />
             <span className="brand-text">RP VISION AI</span>
             <span className="brand-version">V2</span>
           </div>
