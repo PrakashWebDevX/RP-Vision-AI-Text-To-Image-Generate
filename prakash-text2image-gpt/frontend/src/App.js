@@ -91,6 +91,7 @@ function Toast({ msg, type }) {
 }
 
 // ── LOGIN SCREEN ───────────────────────────────────────────
+// ── LOGIN SCREEN ───────────────────────────────────────────
 function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
 
@@ -100,6 +101,7 @@ function LoginScreen({ onLogin }) {
   };
 
   useEffect(() => {
+    // Generate particles
     const container = document.getElementById("rp-particles");
     if (!container) return;
     const colors = ["#00d4ff", "#8b5cf6", "#ff2d78", "#ffffff"];
@@ -169,6 +171,7 @@ function LoginScreen({ onLogin }) {
 
         .rp-page { position:relative; z-index:1; display:flex; height:100vh; }
 
+        /* LEFT */
         .rp-left {
           flex:1.1; display:flex; flex-direction:column; justify-content:center;
           align-items:center; padding:60px; position:relative;
@@ -185,6 +188,11 @@ function LoginScreen({ onLogin }) {
           animation:rpPulse 3s ease-in-out infinite; border-radius:50%;
         }
         @keyframes rpPulse { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
+        .rp-logo-img {
+          width:200px; height:200px; object-fit:contain; position:relative; z-index:1;
+          filter:drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3));
+          border-radius:50%;
+        }
         .rp-logo-placeholder {
           width:200px; height:200px; position:relative; z-index:1; display:flex; align-items:center; justify-content:center;
           font-size:80px; filter:drop-shadow(0 0 30px rgba(0,212,255,.5));
@@ -222,6 +230,7 @@ function LoginScreen({ onLogin }) {
         .rp-ft { font-size:.88rem; color:rgba(255,255,255,.65); }
         .rp-ft strong { color:#fff; font-weight:600; display:block; font-size:.92rem; }
 
+        /* RIGHT / CARD */
         .rp-right { flex:.9; display:flex; align-items:center; justify-content:center; padding:40px; }
         .rp-card {
           width:100%; max-width:420px; background:var(--card-bg);
@@ -289,14 +298,14 @@ function LoginScreen({ onLogin }) {
         .rp-tdot-q { background:#ff2d78; box-shadow:0 0 6px #ff2d78; }
 
         .rp-terms { margin-top:24px; font-size:.72rem; color:rgba(255,255,255,.2); text-align:center; line-height:1.7; }
-        .rp-terms-btn { background:none; border:none; color:rgba(0,212,255,0.6); cursor:pointer; font-size:.72rem; padding:0; transition:color .2s; }
-        .rp-terms-btn:hover { color:#00d4ff; }
+        .rp-terms a { color:rgba(0,212,255,.6); text-decoration:none; transition:color .2s; }
+        .rp-terms a:hover { color:#00d4ff; }
 
         @media (max-width:768px) {
           .rp-page { flex-direction:column; height:auto; min-height:100vh; overflow-y:auto; }
           .rp-left { padding:50px 30px 30px; }
           .rp-left::after { display:none; }
-          .rp-logo-placeholder { width:130px; height:130px; font-size:56px; }
+          .rp-logo-img,.rp-logo-placeholder { width:130px; height:130px; font-size:56px; }
           .rp-brand-name { font-size:1.4rem; }
           .rp-stats { gap:20px; }
           .rp-features { max-width:100%; }
@@ -319,7 +328,7 @@ function LoginScreen({ onLogin }) {
           <div className="rp-left">
             <div className="rp-logo-wrap">
               <div className="rp-logo-glow" />
-              <img src="/logo192.png" alt="RP Vision AI" className="rp-logo-img" />
+              <img src="/logo192.png" alt="RP Vision AI" className="rp-logo-placeholder" style={{ objectFit: "contain", borderRadius: "50%", filter: "drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3))" }} />
             </div>
 
             <div className="rp-brand-name">RP Vision AI</div>
@@ -392,9 +401,9 @@ function LoginScreen({ onLogin }) {
 
               <div className="rp-terms">
                 By continuing, you agree to our{" "}
-                <button className="rp-terms-btn" onClick={() => { }}>Terms of Service</button>
+                <button style={{ background: "none", border: "none", color: "rgba(0,212,255,0.6)", cursor: "pointer", font: "inherit", fontSize: ".72rem", padding: 0 }} onClick={() => { }}>Terms of Service</button>
                 {" "}&amp;{" "}
-                <button className="rp-terms-btn" onClick={() => { }}>Privacy Policy</button>
+                <button style={{ background: "none", border: "none", color: "rgba(0,212,255,0.6)", cursor: "pointer", font: "inherit", fontSize: ".72rem", padding: 0 }} onClick={() => { }}>Privacy Policy</button>
               </div>
             </div>
           </div>
@@ -403,11 +412,10 @@ function LoginScreen({ onLogin }) {
     </>
   );
 }
-
 // ── MAIN APP ───────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
-  const [, setUserData] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // Tool state
@@ -415,13 +423,14 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState(null);
   const [inputImageUrl, setInputImageUrl] = useState("");
+  const [inputImageFile, setInputImageFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(null); // { type: 'image'|'audio', url }
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
 
   // UI state
-  const [view, setView] = useState("create");
+  const [view, setView] = useState("create"); // create | history | profile
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -429,6 +438,7 @@ export default function App() {
   const [creditsUsed, setCreditsUsed] = useState(0);
 
   const progressRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // ── AUTH ──
   useEffect(() => {
@@ -449,8 +459,8 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
-    const res = await signInWithPopup(auth, provider);
-    const data = await getOrCreateUser(res.user);
+    const result = await signInWithPopup(auth, provider);
+    const data = await getOrCreateUser(result.user);
     setUserData(data);
   };
 
@@ -550,11 +560,10 @@ export default function App() {
       stopProgress();
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, style, activeTool, inputImageUrl, loading, creditsLeft, user]);
 
   // ── HISTORY ──
-  const loadHistory = useCallback(async () => {
+  const loadHistory = async () => {
     if (!user) return;
     setHistoryLoading(true);
     try {
@@ -563,11 +572,11 @@ export default function App() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [user]);
+  };
 
   useEffect(() => {
     if (view === "history" && user) loadHistory();
-  }, [view, user, loadHistory]);
+  }, [view, user]);
 
   // ── DOWNLOAD ──
   const download = (url, ext = "png") => {
@@ -586,6 +595,8 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={handleLogin} />;
 
   const needsImageInput = ["image-to-image", "image-to-video", "upscale", "remove-bg"].includes(activeTool.id);
+  const isAudio = activeTool.id === "text-to-audio";
+  const isVideoTool = ["text-to-video", "image-to-video"].includes(activeTool.id);
 
   return (
     <>
@@ -622,9 +633,12 @@ export default function App() {
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes slideIn { from { transform:translateX(-100%); } to { transform:translateX(0); } }
         @keyframes toastIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
 
+        /* ── LAYOUT ── */
         .app { display:flex; height:100vh; }
 
+        /* ── SIDEBAR ── */
         .sidebar {
           width:var(--sidebar); min-width:var(--sidebar); background:var(--panel);
           border-right:1px solid var(--border); display:flex; flex-direction:column;
@@ -676,6 +690,7 @@ export default function App() {
         .logout-btn { background:none; border:1px solid var(--border2); border-radius:7px; color:var(--muted2); font-size:11px; padding:4px 9px; cursor:pointer; transition:all .18s; }
         .logout-btn:hover { border-color:var(--red); color:var(--red); }
 
+        /* ── CREDITS BAR ── */
         .credits-bar { margin:12px 12px 0; background:var(--card); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; flex-shrink:0; }
         .credits-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
         .credits-label { font-size:10px; color:var(--muted2); font-weight:500; letter-spacing:.5px; text-transform:uppercase; }
@@ -683,6 +698,7 @@ export default function App() {
         .credits-track { height:4px; background:var(--border2); border-radius:4px; overflow:hidden; }
         .credits-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:4px; transition:width .4s ease; }
 
+        /* ── MAIN AREA ── */
         .main { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
 
         .main-topbar {
@@ -696,11 +712,14 @@ export default function App() {
         .status-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:blink 2s infinite; }
         .status-dot.busy { background:var(--accent); box-shadow:0 0 8px var(--accent-glow); animation:blink .7s infinite; }
 
+        /* ── PROGRESS ── */
         .progress-bar { height:2px; background:var(--border); flex-shrink:0; }
         .progress-fill-bar { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .3s ease; box-shadow:0 0 8px var(--accent-glow); }
 
+        /* ── WORKSPACE ── */
         .workspace { flex:1; display:flex; gap:0; overflow:hidden; }
 
+        /* ── CONTROLS PANEL ── */
         .controls { width:320px; min-width:320px; border-right:1px solid var(--border); overflow-y:auto; scrollbar-width:none; padding:20px 18px; display:flex; flex-direction:column; gap:18px; }
         .controls::-webkit-scrollbar { display:none; }
 
@@ -724,6 +743,14 @@ export default function App() {
         .style-pill:hover { border-color:var(--border2); color:var(--text); }
         .style-pill.active { border-color:var(--accent); background:var(--accent-dim); color:var(--accent2); }
 
+        .image-upload-area {
+          border:1.5px dashed var(--border2); border-radius:12px; padding:20px;
+          text-align:center; cursor:pointer; transition:all .18s; background:var(--card);
+        }
+        .image-upload-area:hover { border-color:var(--accent); background:var(--accent-dim); }
+        .upload-icon { font-size:24px; margin-bottom:6px; opacity:.4; }
+        .upload-text { font-size:12px; color:var(--muted2); }
+        .upload-sub { font-size:10px; color:var(--muted); margin-top:3px; }
         .uploaded-preview { width:100%; border-radius:10px; margin-top:10px; border:1px solid var(--border2); display:block; }
 
         .gen-btn {
@@ -737,6 +764,7 @@ export default function App() {
         .gen-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
         .gen-btn-credits { font-family:'Space Mono',monospace; font-size:11px; background:rgba(0,0,0,0.2); padding:3px 8px; border-radius:6px; }
 
+        /* ── CANVAS ── */
         .canvas { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px; gap:16px; overflow-y:auto; position:relative; scrollbar-width:none; }
         .canvas::-webkit-scrollbar { display:none; }
 
@@ -766,6 +794,7 @@ export default function App() {
 
         .error-box { background:rgba(231,76,60,.07); border:1px solid rgba(231,76,60,.25); border-radius:12px; padding:14px 18px; font-size:13px; color:var(--red); max-width:500px; text-align:center; animation:fadeUp .3s ease both; }
 
+        /* ── HISTORY VIEW ── */
         .history-view { flex:1; overflow-y:auto; padding:24px 28px; scrollbar-width:none; }
         .history-view::-webkit-scrollbar { display:none; }
         .history-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
@@ -777,6 +806,7 @@ export default function App() {
         .history-prompt { font-size:11.5px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .history-empty { display:flex; flex-direction:column; align-items:center; gap:12px; padding:60px; text-align:center; opacity:.4; }
 
+        /* ── PROFILE VIEW ── */
         .profile-view { flex:1; overflow-y:auto; padding:32px 40px; scrollbar-width:none; }
         .profile-view::-webkit-scrollbar { display:none; }
         .profile-card { background:var(--card); border:1px solid var(--border2); border-radius:20px; padding:28px; max-width:560px; display:flex; flex-direction:column; gap:20px; }
@@ -792,14 +822,33 @@ export default function App() {
         .upgrade-btn { width:100%; padding:14px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; border-radius:12px; color:#000; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px; cursor:pointer; transition:all .2s; box-shadow:0 6px 24px var(--accent-glow); }
         .upgrade-btn:hover { transform:translateY(-1px); box-shadow:0 10px 32px var(--accent-glow); }
 
+        /* ── TOAST ── */
         .toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); padding:11px 22px; border-radius:100px; font-size:13px; font-weight:500; z-index:9999; animation:toastIn .3s ease both; white-space:nowrap; box-shadow:0 8px 32px rgba(0,0,0,.4); }
         .toast-success { background:var(--green); color:#000; }
         .toast-error { background:var(--red); color:#fff; }
         .toast-info { background:var(--card2); color:var(--text); border:1px solid var(--border2); }
 
+        /* ── LOGIN ── */
+        .login-screen { height:100vh; display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; background:var(--bg); }
+        .login-bg { position:absolute; inset:0; background:radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232,193,74,.08) 0%, transparent 70%); pointer-events:none; }
+        .login-card { background:var(--panel); border:1px solid var(--border2); border-radius:24px; padding:48px 42px; max-width:420px; width:90%; display:flex; flex-direction:column; align-items:center; gap:20px; position:relative; box-shadow:0 40px 80px rgba(0,0,0,.6); animation:reveal .5s ease both; }
+        .login-logo { display:flex; align-items:center; gap:12px; }
+        .login-logo-icon { font-size:36px; color:var(--accent); text-shadow:0 0 40px var(--accent-glow); }
+        .login-logo-text { font-family:'Bebas Neue',sans-serif; font-size:36px; letter-spacing:5px; color:var(--accent); text-shadow:0 0 40px var(--accent-glow); }
+        .login-tagline { font-size:14px; color:var(--muted2); text-align:center; font-weight:300; letter-spacing:.3px; }
+        .login-features { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+        .login-feature { display:flex; align-items:center; gap:7px; background:var(--card); border:1px solid var(--border); border-radius:9px; padding:9px 12px; font-size:12px; color:var(--muted2); }
+        .lf-dot { color:var(--accent); font-size:8px; flex-shrink:0; }
+        .login-btn { width:100%; padding:15px; background:var(--accent); border:none; border-radius:13px; color:#000; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:10px; box-shadow:0 6px 24px var(--accent-glow); }
+        .login-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 32px var(--accent-glow); }
+        .login-btn:disabled { opacity:.6; cursor:not-allowed; }
+        .login-footer { font-size:11px; color:var(--muted); text-align:center; }
+
+        /* ── MOBILE TOPBAR ── */
         .mobile-topbar { display:none; }
         .mobile-overlay { display:none; }
 
+        /* ── RESPONSIVE ── */
         @media (max-width:900px) {
           :root { --sidebar:240px; }
           .controls { width:280px; min-width:280px; }
@@ -833,16 +882,19 @@ export default function App() {
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
+      {/* Mobile overlay */}
       {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <div className="app">
+        {/* ── SIDEBAR ── */}
         <aside className={"sidebar" + (sidebarOpen ? " open" : "")}>
           <div className="sidebar-brand">
-            <img src="/logo192.png" alt="RP Vision AI" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6, filter: "drop-shadow(0 0 6px rgba(232,193,74,0.5))" }} />
+            <span className="brand-icon">⬡</span>
             <span className="brand-text">RP VISION AI</span>
             <span className="brand-version">V2</span>
           </div>
 
+          {/* Credits */}
           <div className="credits-bar">
             <div className="credits-row">
               <span className="credits-label">Daily Credits</span>
@@ -853,6 +905,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Tools */}
           <div className="nav-section">
             <div className="nav-section-label">AI Tools</div>
             {TOOLS.map(t => (
@@ -866,6 +919,7 @@ export default function App() {
             ))}
           </div>
 
+          {/* Views */}
           <div className="sidebar-views">
             <div className={"view-btn" + (view === "history" ? " active" : "")} onClick={() => { setView("history"); setSidebarOpen(false); }}>
               <span className="view-icon">◫</span>
@@ -877,6 +931,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* User */}
           <div className="sidebar-user">
             <img className="user-avatar" src={user.photoURL} alt="" />
             <div className="user-info">
@@ -887,13 +942,17 @@ export default function App() {
           </div>
         </aside>
 
+        {/* ── MAIN ── */}
         <main className="main">
+
+          {/* Mobile topbar */}
           <div className="mobile-topbar">
             <button className="hamburger" onClick={() => setSidebarOpen(true)}>☰</button>
             <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 3, color: "var(--accent)" }}>RP VISION AI</span>
             <span style={{ fontSize: 11, color: "var(--muted2)" }}>{creditsLeft}cr left</span>
           </div>
 
+          {/* Desktop topbar */}
           <div className="main-topbar">
             <div>
               <div className="topbar-title">{activeTool.label}</div>
@@ -906,13 +965,17 @@ export default function App() {
             </div>
           </div>
 
+          {/* Progress */}
           <div className="progress-bar">
             <div className="progress-fill-bar" style={{ width: progress + "%" }} />
           </div>
 
+          {/* ── CREATE VIEW ── */}
           {view === "create" && (
             <div className="workspace">
+              {/* Controls */}
               <div className="controls">
+                {/* Prompt */}
                 {!["upscale", "remove-bg"].includes(activeTool.id) && (
                   <div className="ctrl-section">
                     <div className="ctrl-label">Prompt</div>
@@ -932,6 +995,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Image input */}
                 {needsImageInput && (
                   <div className="ctrl-section">
                     <div className="ctrl-label">Input Image URL</div>
@@ -947,6 +1011,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Style presets */}
                 {["text-to-image", "image-to-image"].includes(activeTool.id) && (
                   <div className="ctrl-section">
                     <div className="ctrl-label">Art Style</div>
@@ -961,6 +1026,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Generate button */}
                 <button className="gen-btn" disabled={loading || creditsLeft < activeTool.credits} onClick={generate}>
                   {loading ? <><Spinner />&nbsp;Generating...</> : <>
                     {activeTool.icon}&nbsp;Generate
@@ -975,6 +1041,7 @@ export default function App() {
                 )}
               </div>
 
+              {/* Canvas */}
               <div className="canvas">
                 {!loading && !result && !error && (
                   <div className="empty-state">
@@ -1020,6 +1087,7 @@ export default function App() {
             </div>
           )}
 
+          {/* ── HISTORY VIEW ── */}
           {view === "history" && (
             <div className="history-view">
               <div style={{ marginBottom: 20 }}>
@@ -1050,6 +1118,7 @@ export default function App() {
             </div>
           )}
 
+          {/* ── PROFILE VIEW ── */}
           {view === "profile" && (
             <div className="profile-view">
               <div style={{ marginBottom: 24 }}>
@@ -1092,6 +1161,7 @@ export default function App() {
               </div>
             </div>
           )}
+
         </main>
       </div>
     </>
