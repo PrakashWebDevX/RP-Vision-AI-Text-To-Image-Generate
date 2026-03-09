@@ -1,879 +1,599 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { auth, provider, db } from "./firebase";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import {
-  doc, getDoc, setDoc, updateDoc, collection,
-  addDoc, query, where, orderBy, limit, getDocs, serverTimestamp
-} from "firebase/firestore";
 
-const BACKEND = "https://rp-vision-backend.onrender.com";
-
-const TOOLS = [
-  { id: "text-to-image",   label: "Text to Image",       icon: "⬡", credits: 1, desc: "Generate images from text prompts" },
-  { id: "image-to-image",  label: "Image to Image",      icon: "⬢", credits: 2, desc: "Transform images with AI" },
-  { id: "text-to-video",   label: "Text to Video",       icon: "◈", credits: 5, desc: "Generate videos from prompts" },
-  { id: "image-to-video",  label: "Image to Video",      icon: "◉", credits: 5, desc: "Animate any image with AI" },
-  { id: "text-to-audio",   label: "Text to Audio",       icon: "◎", credits: 3, desc: "Generate audio from text" },
-  { id: "upscale",         label: "Image Upscaler",      icon: "◐", credits: 2, desc: "Upscale images to HD quality" },
-  { id: "remove-bg",       label: "Remove Background",   icon: "◑", credits: 1, desc: "Remove image backgrounds instantly" },
+const STYLE_PRESETS = [
+  { label: "Photorealistic", icon: "◈", tag: "photorealistic, 8k ultra detailed, RAW photo" },
+  { label: "Cinematic", icon: "◉", tag: "cinematic lighting, movie still, anamorphic lens, dramatic" },
+  { label: "Anime", icon: "◎", tag: "anime style, studio ghibli, vibrant colors, detailed illustration" },
+  { label: "Oil Paint", icon: "◐", tag: "oil painting, classical art, textured canvas, masterpiece" },
+  { label: "Cyberpunk", icon: "◑", tag: "cyberpunk, neon lights, futuristic city, blade runner aesthetic" },
+  { label: "Fantasy", icon: "◒", tag: "fantasy art, magical, ethereal lighting, concept art, artstation" },
 ];
 
-const STYLES = [
-  { label: "Photorealistic", tag: "photorealistic, 8k ultra detailed, RAW photo" },
-  { label: "Cinematic",      tag: "cinematic lighting, movie still, dramatic, anamorphic" },
-  { label: "Anime",          tag: "anime style, studio ghibli, vibrant, detailed illustration" },
-  { label: "Oil Paint",      tag: "oil painting, classical art, textured canvas, masterpiece" },
-  { label: "Cyberpunk",      tag: "cyberpunk, neon lights, futuristic, blade runner aesthetic" },
-  { label: "Fantasy",        tag: "fantasy art, magical, ethereal lighting, concept art" },
+const EXAMPLE_PROMPTS = [
+  "Astronaut on crystal moon, Earth in visor, volumetric fog",
+  "Ancient dragon atop gold coins, soft dawn light, epic fantasy",
+  "Neon Tokyo alley in heavy rain, cinematic noir reflections",
+  "Cyberpunk samurai, glowing tattoos, cherry blossoms, hyper-detailed",
 ];
 
-const FREE_CREDITS_PER_DAY = 10;
+const ASPECT_RATIOS = [
+  { label: "Square", icon: "⬛" },
+  { label: "Portrait", icon: "▬" },
+  { label: "Wide", icon: "▭" },
+];
 
-// ── UTILITIES ──────────────────────────────────────────────
-function todayKey() {
-  return new Date().toISOString().split("T")[0];
-}
-
-async function getOrCreateUser(user) {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      uid: user.uid,
-      email: user.email,
-      name: user.displayName,
-      photo: user.photoURL,
-      plan: "free",
-      createdAt: serverTimestamp(),
-      credits: { date: todayKey(), used: 0 },
-    });
-    return { plan: "free", credits: { date: todayKey(), used: 0 } };
-  }
-  return snap.data();
-}
-
-async function checkAndDeductCredits(uid, cost) {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  const data = snap.data();
-  const today = todayKey();
-  let used = data.credits?.date === today ? data.credits.used : 0;
-  if (used + cost > FREE_CREDITS_PER_DAY) return false;
-  await updateDoc(ref, { credits: { date: today, used: used + cost } });
-  return true;
-}
-
-async function saveToHistory(uid, toolId, outputUrl, prompt) {
-  await addDoc(collection(db, "history"), {
-    uid, toolId, outputUrl, prompt,
-    createdAt: serverTimestamp(),
-  });
-}
-
-async function fetchHistory(uid) {
-  const q = query(
-    collection(db, "history"),
-    where("uid", "==", uid),
-    orderBy("createdAt", "desc"),
-    limit(20)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-// ── COMPONENTS ─────────────────────────────────────────────
-function Spinner() {
-  return <div className="spinner" />;
-}
-
-function Toast({ msg, type }) {
-  return msg ? <div className={"toast toast-" + type}>{msg}</div> : null;
-}
-
-// ── LOGIN SCREEN ───────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [loading, setLoading] = useState(false);
-  const handleLogin = async () => {
-    setLoading(true);
-    try { await onLogin(); } finally { setLoading(false); }
-  };
+function TypingDots() {
   return (
-    <div className="login-screen">
-      <div className="login-bg" />
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="login-logo-icon">⬡</span>
-          <span className="login-logo-text">RP VISION AI</span>
-        </div>
-        <div className="login-tagline">Transform your imagination into reality</div>
-        <div className="login-features">
-          {["7 AI Models", "10 Free Credits/Day", "History Dashboard", "HD Quality"].map(f => (
-            <div key={f} className="login-feature"><span className="lf-dot">◆</span>{f}</div>
-          ))}
-        </div>
-        <button className="login-btn" onClick={handleLogin} disabled={loading}>
-          {loading ? <Spinner /> : <>
-            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Continue with Google
-          </>}
-        </button>
-        <div className="login-footer">Free forever · No credit card needed</div>
-      </div>
-    </div>
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+      {[0,1,2].map(i => (
+        <span key={i} style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: "var(--accent)",
+          display: "inline-block",
+          animation: `dotBounce 1.2s ${i * 0.15}s infinite`
+        }} />
+      ))}
+    </span>
   );
 }
 
-// ── MAIN APP ───────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  // Tool state
-  const [activeTool, setActiveTool] = useState(TOOLS[0]);
   const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState(null);
-  const [inputImageUrl, setInputImageUrl] = useState("");
-  const [inputImageFile, setInputImageFile] = useState(null);
+  const [selectedStyle, setSelectedStyle] = useState(null);
+  const [selectedRatio, setSelectedRatio] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { type: 'image'|'audio', url }
+  const [imageUrl, setImageUrl] = useState(null);
   const [error, setError] = useState(null);
-  const [progress, setProgress] = useState(0);
-
-  // UI state
-  const [view, setView] = useState("create"); // create | history | profile
   const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [creditsUsed, setCreditsUsed] = useState(0);
-
+  const [progress, setProgress] = useState(0);
+  const [mobileTab, setMobileTab] = useState("create");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const progressRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
 
-  // ── AUTH ──
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        const data = await getOrCreateUser(u);
-        setUser(u);
-        setUserData(data);
-        const today = todayKey();
-        setCreditsUsed(data.credits?.date === today ? data.credits.used : 0);
-      } else {
-        setUser(null);
-        setUserData(null);
-      }
-      setAuthLoading(false);
-    });
-    return unsub;
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const handleLogin = async () => {
-    const result = await signInWithPopup(auth, provider);
-    const data = await getOrCreateUser(result.user);
-    setUserData(data);
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    setResult(null);
-    setHistory([]);
-  };
-
-  // ── PROGRESS ──
   const startProgress = () => {
     setProgress(0);
     let p = 0;
     progressRef.current = setInterval(() => {
-      p += Math.random() * 3;
+      p += Math.random() * 2.5;
       if (p >= 90) { clearInterval(progressRef.current); p = 90; }
       setProgress(p);
-    }, 300);
+    }, 250);
   };
 
   const stopProgress = () => {
     clearInterval(progressRef.current);
     setProgress(100);
-    setTimeout(() => setProgress(0), 600);
+    setTimeout(() => setProgress(0), 500);
   };
 
-  // ── TOAST ──
-  const showToast = (msg, type = "info") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // ── CREDITS ──
-  const creditsLeft = FREE_CREDITS_PER_DAY - creditsUsed;
-
-  // ── GENERATE ──
   const generate = useCallback(async () => {
-    if (loading) return;
-    if (!prompt.trim() && !["upscale", "remove-bg", "image-to-video"].includes(activeTool.id)) {
-      showToast("Please enter a prompt!", "error"); return;
-    }
-    if (creditsLeft < activeTool.credits) {
-      showToast(`Not enough credits! Need ${activeTool.credits}, have ${creditsLeft}`, "error"); return;
-    }
-
+    if (!prompt.trim() || loading) return;
     setError(null);
-    setResult(null);
     setLoading(true);
     startProgress();
+    if (isMobile) setMobileTab("result");
 
-    const ok = await checkAndDeductCredits(user.uid, activeTool.credits);
-    if (!ok) {
-      setLoading(false);
-      stopProgress();
-      showToast("Daily credit limit reached! Resets at midnight.", "error");
-      return;
-    }
-    setCreditsUsed(c => c + activeTool.credits);
+    const style = selectedStyle !== null ? STYLE_PRESETS[selectedStyle].tag : "";
+    const fullPrompt = [prompt.trim(), style].filter(Boolean).join(", ");
 
     try {
-      const styleTag = style !== null ? STYLES[style].tag : "";
-      const fullPrompt = [prompt.trim(), styleTag].filter(Boolean).join(", ");
-      let body = {};
-      let endpoint = activeTool.id;
-
-      if (activeTool.id === "text-to-image")   body = { prompt: fullPrompt };
-      if (activeTool.id === "image-to-image")   body = { prompt: fullPrompt, image_url: inputImageUrl };
-      if (activeTool.id === "text-to-video")    body = { prompt: fullPrompt };
-      if (activeTool.id === "image-to-video")   body = { prompt: fullPrompt, image_url: inputImageUrl };
-      if (activeTool.id === "text-to-audio")    body = { prompt: fullPrompt };
-      if (activeTool.id === "upscale")          body = { image_url: inputImageUrl };
-      if (activeTool.id === "remove-bg")        { body = { image_url: inputImageUrl }; endpoint = "remove-background"; }
-
-      const res = await fetch(`${BACKEND}/${endpoint}`, {
+      const res = await fetch("https://rp-vision-backend.onrender.com/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Generation failed");
-      }
-
+      if (!res.ok) throw new Error("Generation failed. Check your backend.");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const type = activeTool.id === "text-to-audio" ? "audio" : "image";
-      setResult({ type, url });
-
-      await saveToHistory(user.uid, activeTool.id, url, prompt);
-      showToast("Generated successfully!", "success");
-
+      setImageUrl(url);
+      setHistory(prev => [{ url, prompt: prompt.trim(), style: selectedStyle !== null ? STYLE_PRESETS[selectedStyle].label : "Default" }, ...prev.slice(0, 11)]);
     } catch (err) {
-      setError(err.message);
-      showToast(err.message, "error");
+      setError(err.message || "Something went wrong.");
     } finally {
       stopProgress();
       setLoading(false);
     }
-  }, [prompt, style, activeTool, inputImageUrl, loading, creditsLeft, user]);
+  }, [prompt, selectedStyle, loading, isMobile]);
 
-  // ── HISTORY ──
-  const loadHistory = async () => {
-    if (!user) return;
-    setHistoryLoading(true);
-    try {
-      const h = await fetchHistory(user.uid);
-      setHistory(h);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (view === "history" && user) loadHistory();
-  }, [view, user]);
-
-  // ── DOWNLOAD ──
-  const download = (url, ext = "png") => {
+  const downloadImage = () => {
+    if (!imageUrl) return;
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `rp-vision-${Date.now()}.${ext}`;
+    a.href = imageUrl;
+    a.download = `rp-vision-${Date.now()}.png`;
     a.click();
   };
 
-  if (authLoading) return (
-    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#050508" }}>
-      <div className="spinner" style={{ width: 48, height: 48, borderWidth: 3 }} />
-    </div>
-  );
-
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
-
-  const needsImageInput = ["image-to-image", "image-to-video", "upscale", "remove-bg"].includes(activeTool.id);
-  const isAudio = activeTool.id === "text-to-audio";
-  const isVideoTool = ["text-to-video", "image-to-video"].includes(activeTool.id);
+  const autoResize = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+  };
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600&display=swap');
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         :root {
-          --bg: #03030a;
-          --panel: #08080f;
-          --card: #0e0e1a;
-          --card2: #131320;
-          --border: rgba(255,255,255,0.05);
-          --border2: rgba(255,255,255,0.1);
+          --bg: #050508;
+          --panel: #0c0c13;
+          --card: #111119;
+          --card2: #161620;
+          --border: rgba(255,255,255,0.06);
+          --border2: rgba(255,255,255,0.11);
           --accent: #e8c14a;
           --accent2: #f5d97a;
-          --accent-dim: rgba(232,193,74,0.1);
-          --accent-glow: rgba(232,193,74,0.25);
-          --blue: #4a90e8;
-          --purple: #9b59b6;
-          --green: #2ecc71;
-          --red: #e74c3c;
+          --accent-dim: rgba(232,193,74,0.12);
+          --accent-glow: rgba(232,193,74,0.28);
           --text: #eeeef5;
-          --muted: #44445a;
-          --muted2: #7777a0;
-          --sidebar: 280px;
+          --muted: #525268;
+          --muted2: #8888a0;
+          --red: #ff5555;
+          --green: #50fa7b;
+          --sidebar-w: 340px;
         }
+
         html { height: 100%; -webkit-text-size-adjust: 100%; }
-        body { height: 100%; background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; overflow: hidden; }
+        body {
+          height: 100%;
+          background: var(--bg);
+          color: var(--text);
+          font-family: 'Outfit', sans-serif;
+          font-weight: 400;
+          overflow: hidden;
+        }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes shimmer { from { transform:translateX(-100%); } to { transform:translateX(200%); } }
-        @keyframes reveal { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-        @keyframes slideIn { from { transform:translateX(-100%); } to { transform:translateX(0); } }
-        @keyframes toastIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+        body::after {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+          pointer-events: none;
+          z-index: 9999;
+        }
 
-        /* ── LAYOUT ── */
-        .app { display:flex; height:100vh; }
+        @keyframes dotBounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-5px); opacity: 1; }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(200%); }
+        }
+        @keyframes imageReveal {
+          from { opacity: 0; transform: scale(0.97) translateY(8px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
 
-        /* ── SIDEBAR ── */
+        /* DESKTOP */
+        .desktop-layout { display: flex; height: 100vh; }
+
         .sidebar {
-          width:var(--sidebar); min-width:var(--sidebar); background:var(--panel);
-          border-right:1px solid var(--border); display:flex; flex-direction:column;
-          overflow-y:auto; scrollbar-width:none; flex-shrink:0; z-index:10;
+          width: var(--sidebar-w);
+          min-width: var(--sidebar-w);
+          background: var(--panel);
+          border-right: 1px solid var(--border);
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
-        .sidebar::-webkit-scrollbar { display:none; }
+        .sidebar::-webkit-scrollbar { display: none; }
+        .brand { padding: 26px 26px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .brand-name { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 4px; color: var(--accent); line-height: 1; text-shadow: 0 0 40px var(--accent-glow); }
+        .brand-sub { font-size: 10px; color: var(--muted2); letter-spacing: 2.5px; text-transform: uppercase; margin-top: 4px; font-weight: 300; }
+        .sidebar-section { padding: 18px 22px; border-bottom: 1px solid var(--border); }
+        .section-label { font-size: 9.5px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+        textarea { width: 100%; background: var(--card); border: 1.5px solid var(--border2); border-radius: 14px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 13.5px; font-weight: 300; line-height: 1.7; padding: 13px 14px 38px; resize: none; outline: none; transition: border-color 0.2s, box-shadow 0.2s; min-height: 110px; }
+        textarea::placeholder { color: var(--muted); }
+        textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+        .prompt-wrapper { position: relative; }
+        .char-count { position: absolute; bottom: 11px; right: 13px; font-size: 10px; color: var(--muted); }
+        .examples { display: flex; flex-direction: column; gap: 6px; }
+        .example-btn { background: transparent; border: 1px solid var(--border); border-radius: 9px; color: var(--muted2); font-family: 'Outfit', sans-serif; font-size: 11.5px; font-weight: 300; padding: 7px 11px; text-align: left; cursor: pointer; transition: all 0.18s; line-height: 1.4; }
+        .example-btn:hover { border-color: var(--accent); color: var(--accent2); background: var(--accent-dim); }
+        .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+        .style-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 11px; padding: 9px 11px; cursor: pointer; transition: all 0.18s; display: flex; align-items: center; gap: 8px; user-select: none; }
+        .style-card:hover { border-color: var(--border2); background: var(--card2); }
+        .style-card.active { border-color: var(--accent); background: var(--accent-dim); }
+        .style-icon { font-size: 14px; color: var(--accent); flex-shrink: 0; }
+        .style-label { font-size: 11.5px; font-weight: 500; color: var(--muted2); }
+        .style-card.active .style-label { color: var(--accent2); }
+        .ratio-row { display: flex; gap: 7px; }
+        .ratio-btn { flex: 1; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 8px 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.18s; user-select: none; }
+        .ratio-btn.active { border-color: var(--accent); background: var(--accent-dim); }
+        .ratio-icon { font-size: 13px; color: var(--muted2); }
+        .ratio-btn.active .ratio-icon { color: var(--accent); }
+        .ratio-text { font-size: 9.5px; color: var(--muted); font-weight: 500; letter-spacing: 0.4px; }
+        .ratio-btn.active .ratio-text { color: var(--accent2); }
+        .generate-wrap { padding: 18px 22px 24px; margin-top: auto; flex-shrink: 0; }
+        .generate-btn { width: 100%; padding: 15px; background: var(--accent); border: none; border-radius: 14px; color: #050508; font-family: 'Bebas Neue', sans-serif; font-size: 19px; letter-spacing: 2px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; box-shadow: 0 6px 28px var(--accent-glow); }
+        .generate-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent); transition: left 0.4s; }
+        .generate-btn:hover:not(:disabled)::before { left: 100%; }
+        .generate-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 36px var(--accent-glow); }
+        .generate-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+        .main-header { padding: 18px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+        .status-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted2); font-weight: 300; }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); flex-shrink: 0; animation: blink 2s infinite; }
+        .status-dot.loading { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: blink 0.8s infinite; }
+        .history-badge { font-size: 11px; color: var(--muted2); background: var(--card); border: 1px solid var(--border2); padding: 4px 12px; border-radius: 100px; }
+        .canvas-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 32px; gap: 20px; overflow-y: auto; position: relative; scrollbar-width: none; }
+        .canvas-area::-webkit-scrollbar { display: none; }
+        .progress-track { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--border); }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.3s ease; box-shadow: 0 0 10px var(--accent-glow); }
+        .empty-state { display: flex; flex-direction: column; align-items: center; gap: 14px; animation: fadeUp 0.5s ease both; text-align: center; }
+        .empty-glyph { font-size: 52px; opacity: 0.18; line-height: 1; }
+        .empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 3.5px; color: var(--muted2); opacity: 0.5; }
+        .empty-hint { font-size: 12px; color: var(--muted); font-weight: 300; opacity: 0.6; }
+        .loading-box { width: 100%; max-width: 560px; aspect-ratio: 1 / 1; border-radius: 20px; background: var(--card); border: 1px solid var(--border2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; position: relative; overflow: hidden; }
+        .loading-box::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgba(232,193,74,0.05) 50%, transparent 70%); animation: shimmer 2s infinite; }
+        .spinner { width: 38px; height: 38px; border: 2.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .loading-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px; color: var(--accent); text-shadow: 0 0 30px var(--accent-glow); z-index: 1; }
+        .loading-sub { font-size: 11.5px; color: var(--muted2); font-weight: 300; z-index: 1; }
+        .error-box { background: rgba(255,85,85,0.07); border: 1px solid rgba(255,85,85,0.28); border-radius: 12px; padding: 14px 20px; font-size: 13px; color: var(--red); max-width: 500px; text-align: center; font-weight: 300; animation: fadeUp 0.3s ease both; }
+        .image-frame { position: relative; border-radius: 20px; overflow: hidden; max-width: 560px; width: 100%; box-shadow: 0 28px 72px rgba(0,0,0,0.65), 0 0 0 1px var(--border2); animation: imageReveal 0.5s ease both; cursor: pointer; }
+        .image-frame img { display: block; width: 100%; height: auto; }
+        .img-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%); opacity: 0; transition: opacity 0.25s; display: flex; align-items: flex-end; padding: 18px; gap: 8px; }
+        .image-frame:hover .img-overlay { opacity: 1; }
+        .img-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); border-radius: 9px; color: white; font-family: 'Outfit', sans-serif; font-size: 11.5px; font-weight: 500; padding: 7px 14px; cursor: pointer; backdrop-filter: blur(10px); transition: all 0.18s; }
+        .img-btn:hover { background: var(--accent); color: #050508; border-color: var(--accent); }
+        .prompt-caption { max-width: 560px; width: 100%; text-align: center; font-size: 12.5px; color: var(--muted2); font-weight: 300; font-style: italic; line-height: 1.5; padding: 0 16px; }
+        .history-strip { border-top: 1px solid var(--border); padding: 14px 28px; display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+        .history-strip::-webkit-scrollbar { display: none; }
+        .history-label { font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; align-self: center; flex-shrink: 0; }
+        .history-thumb { flex-shrink: 0; width: 58px; height: 58px; border-radius: 9px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; transition: all 0.18s; }
+        .history-thumb:hover { border-color: var(--accent); transform: scale(1.06); box-shadow: 0 4px 16px var(--accent-glow); }
+        .history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-        .sidebar-brand {
-          padding:22px 20px 16px; border-bottom:1px solid var(--border); flex-shrink:0;
-          display:flex; align-items:center; gap:10px;
+        /* MOBILE */
+        .mobile-layout { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+        .mobile-topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+        .mobile-brand { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 4px; color: var(--accent); text-shadow: 0 0 30px var(--accent-glow); }
+        .mobile-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted2); }
+        .mobile-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+        .mobile-tab { flex: 1; padding: 12px; background: none; border: none; color: var(--muted); font-family: 'Outfit', sans-serif; font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+        .mobile-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .mobile-create { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 18px 16px; display: flex; flex-direction: column; gap: 20px; scrollbar-width: none; }
+        .mobile-create::-webkit-scrollbar { display: none; }
+        .m-label { font-size: 9.5px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+        .mobile-textarea { width: 100%; background: var(--card); border: 1.5px solid var(--border2); border-radius: 14px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 300; line-height: 1.7; padding: 14px 14px 40px; resize: none; outline: none; transition: border-color 0.2s, box-shadow 0.2s; min-height: 110px; -webkit-appearance: none; }
+        .mobile-textarea::placeholder { color: var(--muted); }
+        .mobile-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+        .mobile-examples { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px; }
+        .mobile-examples::-webkit-scrollbar { display: none; }
+        .mobile-chip { flex-shrink: 0; background: var(--card); border: 1px solid var(--border2); border-radius: 100px; color: var(--muted2); font-family: 'Outfit', sans-serif; font-size: 11.5px; font-weight: 400; padding: 7px 14px; cursor: pointer; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; transition: all 0.18s; -webkit-tap-highlight-color: transparent; }
+        .mobile-chip:active { border-color: var(--accent); color: var(--accent2); background: var(--accent-dim); }
+        .mobile-style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .mobile-style-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 12px; padding: 11px 8px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; align-items: center; gap: 5px; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .mobile-style-card.active { border-color: var(--accent); background: var(--accent-dim); }
+        .m-style-icon { font-size: 18px; color: var(--accent); }
+        .m-style-label { font-size: 10.5px; font-weight: 500; color: var(--muted2); }
+        .mobile-style-card.active .m-style-label { color: var(--accent2); }
+        .mobile-ratio { display: flex; gap: 8px; }
+        .mobile-ratio-btn { flex: 1; background: var(--card); border: 1.5px solid var(--border); border-radius: 11px; padding: 10px 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; transition: all 0.18s; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .mobile-ratio-btn.active { border-color: var(--accent); background: var(--accent-dim); }
+        .m-ratio-icon { font-size: 16px; color: var(--muted2); }
+        .mobile-ratio-btn.active .m-ratio-icon { color: var(--accent); }
+        .m-ratio-text { font-size: 10px; color: var(--muted); font-weight: 500; }
+        .mobile-ratio-btn.active .m-ratio-text { color: var(--accent2); }
+        .mobile-gen-bar { padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+        .mobile-gen-btn { width: 100%; padding: 15px; background: var(--accent); border: none; border-radius: 14px; color: #050508; font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2.5px; cursor: pointer; transition: all 0.2s; box-shadow: 0 6px 24px var(--accent-glow); -webkit-tap-highlight-color: transparent; }
+        .mobile-gen-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .mobile-gen-btn:active:not(:disabled) { transform: scale(0.98); }
+        .mobile-result { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 16px 24px; scrollbar-width: none; position: relative; }
+        .mobile-result::-webkit-scrollbar { display: none; }
+        .m-progress-track { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--border); }
+        .m-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.3s ease; box-shadow: 0 0 10px var(--accent-glow); }
+        .mobile-loading-box { width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; background: var(--card); border: 1px solid var(--border2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; overflow: hidden; position: relative; }
+        .mobile-loading-box::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgba(232,193,74,0.05) 50%, transparent 70%); animation: shimmer 2s infinite; }
+        .mobile-image-frame { width: 100%; border-radius: 18px; overflow: hidden; border: 1px solid var(--border2); box-shadow: 0 20px 60px rgba(0,0,0,0.6); animation: imageReveal 0.5s ease both; }
+        .mobile-image-frame img { display: block; width: 100%; height: auto; }
+        .mobile-action-row { display: flex; gap: 10px; width: 100%; }
+        .mobile-action-btn { flex: 1; padding: 11px 8px; background: var(--card); border: 1.5px solid var(--border2); border-radius: 12px; color: var(--muted2); font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.18s; display: flex; align-items: center; justify-content: center; gap: 5px; -webkit-tap-highlight-color: transparent; }
+        .mobile-action-btn:active { border-color: var(--accent); color: var(--accent2); background: var(--accent-dim); }
+        .mobile-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; opacity: 0.35; text-align: center; margin-top: 60px; }
+        .mobile-history-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; margin-top: 10px; }
+        .mobile-history-thumb { aspect-ratio: 1; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; transition: all 0.18s; -webkit-tap-highlight-color: transparent; }
+        .mobile-history-thumb:active { border-color: var(--accent); transform: scale(0.95); }
+        .mobile-history-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        /* RESPONSIVE SHOW/HIDE */
+        @media (max-width: 767px) {
+          .desktop-layout { display: none !important; }
+          .mobile-layout { display: flex !important; }
         }
-        .brand-icon { font-size:22px; color:var(--accent); line-height:1; }
-        .brand-text { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; color:var(--accent); text-shadow:0 0 30px var(--accent-glow); }
-        .brand-version { font-size:9px; background:var(--accent); color:#000; padding:2px 6px; border-radius:4px; font-weight:700; letter-spacing:1px; margin-left:auto; }
-
-        .nav-section { padding:14px 12px 8px; }
-        .nav-section-label { font-size:9px; font-weight:600; letter-spacing:2.5px; text-transform:uppercase; color:var(--muted); padding:0 8px; margin-bottom:6px; }
-
-        .nav-item {
-          display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px;
-          cursor:pointer; transition:all .18s; user-select:none; margin-bottom:2px;
-          border:1px solid transparent;
+        @media (min-width: 768px) {
+          .mobile-layout { display: none !important; }
+          .desktop-layout { display: flex !important; }
         }
-        .nav-item:hover { background:var(--card); border-color:var(--border); }
-        .nav-item.active { background:var(--accent-dim); border-color:rgba(232,193,74,0.2); }
-        .nav-icon { font-size:15px; color:var(--muted2); flex-shrink:0; width:20px; text-align:center; transition:color .18s; }
-        .nav-item.active .nav-icon { color:var(--accent); }
-        .nav-label { font-size:13px; font-weight:500; color:var(--muted2); transition:color .18s; flex:1; }
-        .nav-item.active .nav-label { color:var(--text); }
-        .nav-credits { font-size:10px; background:var(--card2); color:var(--muted2); padding:2px 7px; border-radius:20px; border:1px solid var(--border2); flex-shrink:0; }
-        .nav-item.active .nav-credits { background:var(--accent-dim); color:var(--accent); border-color:rgba(232,193,74,0.3); }
-
-        .sidebar-views { padding:8px 12px; border-top:1px solid var(--border); margin-top:auto; }
-        .view-btn { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; cursor:pointer; transition:all .18s; margin-bottom:2px; border:1px solid transparent; }
-        .view-btn:hover { background:var(--card); border-color:var(--border); }
-        .view-btn.active { background:var(--card2); border-color:var(--border2); }
-        .view-icon { font-size:14px; width:20px; text-align:center; color:var(--muted2); }
-        .view-label { font-size:13px; font-weight:500; color:var(--muted2); }
-        .view-btn.active .view-label, .view-btn.active .view-icon { color:var(--text); }
-
-        .sidebar-user {
-          padding:14px 16px; border-top:1px solid var(--border);
-          display:flex; align-items:center; gap:10px; flex-shrink:0;
-        }
-        .user-avatar { width:34px; height:34px; border-radius:50%; object-fit:cover; border:2px solid var(--border2); flex-shrink:0; }
-        .user-info { flex:1; min-width:0; }
-        .user-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .user-plan { font-size:10px; color:var(--accent); font-weight:500; letter-spacing:.5px; }
-        .logout-btn { background:none; border:1px solid var(--border2); border-radius:7px; color:var(--muted2); font-size:11px; padding:4px 9px; cursor:pointer; transition:all .18s; }
-        .logout-btn:hover { border-color:var(--red); color:var(--red); }
-
-        /* ── CREDITS BAR ── */
-        .credits-bar { margin:12px 12px 0; background:var(--card); border:1px solid var(--border2); border-radius:12px; padding:12px 14px; flex-shrink:0; }
-        .credits-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
-        .credits-label { font-size:10px; color:var(--muted2); font-weight:500; letter-spacing:.5px; text-transform:uppercase; }
-        .credits-count { font-family:'Space Mono',monospace; font-size:12px; color:var(--accent); font-weight:700; }
-        .credits-track { height:4px; background:var(--border2); border-radius:4px; overflow:hidden; }
-        .credits-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:4px; transition:width .4s ease; }
-
-        /* ── MAIN AREA ── */
-        .main { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
-
-        .main-topbar {
-          padding:14px 28px; border-bottom:1px solid var(--border);
-          display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
-        }
-        .topbar-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; color:var(--text); }
-        .topbar-desc { font-size:12px; color:var(--muted2); margin-top:1px; font-weight:300; }
-        .topbar-right { display:flex; align-items:center; gap:10px; }
-        .topbar-badge { font-size:11px; color:var(--muted2); background:var(--card); border:1px solid var(--border2); padding:5px 13px; border-radius:100px; }
-        .status-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:blink 2s infinite; }
-        .status-dot.busy { background:var(--accent); box-shadow:0 0 8px var(--accent-glow); animation:blink .7s infinite; }
-
-        /* ── PROGRESS ── */
-        .progress-bar { height:2px; background:var(--border); flex-shrink:0; }
-        .progress-fill-bar { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .3s ease; box-shadow:0 0 8px var(--accent-glow); }
-
-        /* ── WORKSPACE ── */
-        .workspace { flex:1; display:flex; gap:0; overflow:hidden; }
-
-        /* ── CONTROLS PANEL ── */
-        .controls { width:320px; min-width:320px; border-right:1px solid var(--border); overflow-y:auto; scrollbar-width:none; padding:20px 18px; display:flex; flex-direction:column; gap:18px; }
-        .controls::-webkit-scrollbar { display:none; }
-
-        .ctrl-section { display:flex; flex-direction:column; gap:8px; }
-        .ctrl-label { font-size:9.5px; font-weight:600; letter-spacing:2.5px; text-transform:uppercase; color:var(--muted); }
-
-        textarea, .url-input {
-          width:100%; background:var(--card); border:1.5px solid var(--border2);
-          border-radius:12px; color:var(--text); font-family:'DM Sans',sans-serif;
-          font-size:13.5px; font-weight:300; line-height:1.7; padding:12px 13px;
-          outline:none; transition:border-color .2s, box-shadow .2s;
-        }
-        textarea { resize:none; min-height:100px; padding-bottom:34px; }
-        textarea::placeholder, .url-input::placeholder { color:var(--muted); }
-        textarea:focus, .url-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
-        .prompt-wrap { position:relative; }
-        .char-count { position:absolute; bottom:10px; right:12px; font-size:10px; color:var(--muted); font-family:'Space Mono',monospace; }
-
-        .style-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-        .style-pill { background:var(--card); border:1.5px solid var(--border); border-radius:9px; padding:7px 10px; cursor:pointer; transition:all .18s; font-size:11.5px; font-weight:500; color:var(--muted2); text-align:center; user-select:none; }
-        .style-pill:hover { border-color:var(--border2); color:var(--text); }
-        .style-pill.active { border-color:var(--accent); background:var(--accent-dim); color:var(--accent2); }
-
-        .image-upload-area {
-          border:1.5px dashed var(--border2); border-radius:12px; padding:20px;
-          text-align:center; cursor:pointer; transition:all .18s; background:var(--card);
-        }
-        .image-upload-area:hover { border-color:var(--accent); background:var(--accent-dim); }
-        .upload-icon { font-size:24px; margin-bottom:6px; opacity:.4; }
-        .upload-text { font-size:12px; color:var(--muted2); }
-        .upload-sub { font-size:10px; color:var(--muted); margin-top:3px; }
-        .uploaded-preview { width:100%; border-radius:10px; margin-top:10px; border:1px solid var(--border2); display:block; }
-
-        .gen-btn {
-          width:100%; padding:14px; background:var(--accent); border:none;
-          border-radius:13px; color:#03030a; font-family:'Bebas Neue',sans-serif;
-          font-size:18px; letter-spacing:2px; cursor:pointer; transition:all .2s;
-          position:relative; overflow:hidden; box-shadow:0 6px 24px var(--accent-glow);
-          display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .gen-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 32px var(--accent-glow); }
-        .gen-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
-        .gen-btn-credits { font-family:'Space Mono',monospace; font-size:11px; background:rgba(0,0,0,0.2); padding:3px 8px; border-radius:6px; }
-
-        /* ── CANVAS ── */
-        .canvas { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px; gap:16px; overflow-y:auto; position:relative; scrollbar-width:none; }
-        .canvas::-webkit-scrollbar { display:none; }
-
-        .empty-state { display:flex; flex-direction:column; align-items:center; gap:12px; animation:fadeUp .5s ease both; text-align:center; opacity:.4; }
-        .empty-icon { font-size:56px; line-height:1; }
-        .empty-title { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:4px; color:var(--muted2); }
-        .empty-sub { font-size:12px; color:var(--muted); font-weight:300; }
-
-        .loading-card { width:100%; max-width:540px; aspect-ratio:1/1; border-radius:20px; background:var(--card); border:1px solid var(--border2); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; position:relative; overflow:hidden; }
-        .loading-card::after { content:''; position:absolute; inset:0; background:linear-gradient(105deg,transparent 30%,rgba(232,193,74,.04) 50%,transparent 70%); animation:shimmer 2s infinite; }
-        .spinner { width:36px; height:36px; border:2.5px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
-        .loading-label { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:3px; color:var(--accent); text-shadow:0 0 20px var(--accent-glow); z-index:1; }
-        .loading-sub-text { font-size:11px; color:var(--muted2); z-index:1; }
-
-        .result-frame { width:100%; max-width:540px; border-radius:20px; overflow:hidden; border:1px solid var(--border2); box-shadow:0 24px 60px rgba(0,0,0,.6); animation:reveal .4s ease both; position:relative; cursor:pointer; }
-        .result-frame img { display:block; width:100%; height:auto; }
-        .result-overlay { position:absolute; inset:0; background:linear-gradient(to top,rgba(0,0,0,.8) 0%,transparent 50%); opacity:0; transition:opacity .25s; display:flex; align-items:flex-end; padding:16px; gap:8px; }
-        .result-frame:hover .result-overlay { opacity:1; }
-        .overlay-btn { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2); border-radius:8px; color:white; font-size:11.5px; font-weight:500; padding:7px 14px; cursor:pointer; backdrop-filter:blur(10px); transition:all .18s; font-family:'DM Sans',sans-serif; }
-        .overlay-btn:hover { background:var(--accent); color:#000; border-color:var(--accent); }
-
-        .audio-player { width:100%; max-width:540px; background:var(--card); border:1px solid var(--border2); border-radius:16px; padding:20px; animation:reveal .4s ease both; }
-        .audio-player audio { width:100%; margin-top:10px; }
-        .audio-label { font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:2px; color:var(--accent); }
-
-        .result-caption { max-width:540px; font-size:12px; color:var(--muted2); font-style:italic; text-align:center; line-height:1.5; font-weight:300; }
-
-        .error-box { background:rgba(231,76,60,.07); border:1px solid rgba(231,76,60,.25); border-radius:12px; padding:14px 18px; font-size:13px; color:var(--red); max-width:500px; text-align:center; animation:fadeUp .3s ease both; }
-
-        /* ── HISTORY VIEW ── */
-        .history-view { flex:1; overflow-y:auto; padding:24px 28px; scrollbar-width:none; }
-        .history-view::-webkit-scrollbar { display:none; }
-        .history-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
-        .history-card { background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; cursor:pointer; transition:all .2s; }
-        .history-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 10px 30px rgba(0,0,0,.4); }
-        .history-img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; }
-        .history-info { padding:10px 12px; }
-        .history-tool { font-size:9px; color:var(--accent); font-weight:600; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:3px; }
-        .history-prompt { font-size:11.5px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .history-empty { display:flex; flex-direction:column; align-items:center; gap:12px; padding:60px; text-align:center; opacity:.4; }
-
-        /* ── PROFILE VIEW ── */
-        .profile-view { flex:1; overflow-y:auto; padding:32px 40px; scrollbar-width:none; }
-        .profile-view::-webkit-scrollbar { display:none; }
-        .profile-card { background:var(--card); border:1px solid var(--border2); border-radius:20px; padding:28px; max-width:560px; display:flex; flex-direction:column; gap:20px; }
-        .profile-header { display:flex; align-items:center; gap:16px; }
-        .profile-avatar { width:64px; height:64px; border-radius:50%; border:3px solid var(--accent); object-fit:cover; }
-        .profile-name { font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:2px; color:var(--text); }
-        .profile-email { font-size:13px; color:var(--muted2); }
-        .profile-plan { display:inline-block; background:var(--accent-dim); color:var(--accent); border:1px solid rgba(232,193,74,.3); border-radius:6px; padding:3px 10px; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-top:4px; }
-        .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .stat-card { background:var(--card2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
-        .stat-value { font-family:'Space Mono',monospace; font-size:24px; color:var(--accent); font-weight:700; }
-        .stat-label { font-size:11px; color:var(--muted2); margin-top:3px; }
-        .upgrade-btn { width:100%; padding:14px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; border-radius:12px; color:#000; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px; cursor:pointer; transition:all .2s; box-shadow:0 6px 24px var(--accent-glow); }
-        .upgrade-btn:hover { transform:translateY(-1px); box-shadow:0 10px 32px var(--accent-glow); }
-
-        /* ── TOAST ── */
-        .toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); padding:11px 22px; border-radius:100px; font-size:13px; font-weight:500; z-index:9999; animation:toastIn .3s ease both; white-space:nowrap; box-shadow:0 8px 32px rgba(0,0,0,.4); }
-        .toast-success { background:var(--green); color:#000; }
-        .toast-error { background:var(--red); color:#fff; }
-        .toast-info { background:var(--card2); color:var(--text); border:1px solid var(--border2); }
-
-        /* ── LOGIN ── */
-        .login-screen { height:100vh; display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; background:var(--bg); }
-        .login-bg { position:absolute; inset:0; background:radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232,193,74,.08) 0%, transparent 70%); pointer-events:none; }
-        .login-card { background:var(--panel); border:1px solid var(--border2); border-radius:24px; padding:48px 42px; max-width:420px; width:90%; display:flex; flex-direction:column; align-items:center; gap:20px; position:relative; box-shadow:0 40px 80px rgba(0,0,0,.6); animation:reveal .5s ease both; }
-        .login-logo { display:flex; align-items:center; gap:12px; }
-        .login-logo-icon { font-size:36px; color:var(--accent); text-shadow:0 0 40px var(--accent-glow); }
-        .login-logo-text { font-family:'Bebas Neue',sans-serif; font-size:36px; letter-spacing:5px; color:var(--accent); text-shadow:0 0 40px var(--accent-glow); }
-        .login-tagline { font-size:14px; color:var(--muted2); text-align:center; font-weight:300; letter-spacing:.3px; }
-        .login-features { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
-        .login-feature { display:flex; align-items:center; gap:7px; background:var(--card); border:1px solid var(--border); border-radius:9px; padding:9px 12px; font-size:12px; color:var(--muted2); }
-        .lf-dot { color:var(--accent); font-size:8px; flex-shrink:0; }
-        .login-btn { width:100%; padding:15px; background:var(--accent); border:none; border-radius:13px; color:#000; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:10px; box-shadow:0 6px 24px var(--accent-glow); }
-        .login-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 32px var(--accent-glow); }
-        .login-btn:disabled { opacity:.6; cursor:not-allowed; }
-        .login-footer { font-size:11px; color:var(--muted); text-align:center; }
-
-        /* ── MOBILE TOPBAR ── */
-        .mobile-topbar { display:none; }
-        .mobile-overlay { display:none; }
-
-        /* ── RESPONSIVE ── */
-        @media (max-width:900px) {
-          :root { --sidebar:240px; }
-          .controls { width:280px; min-width:280px; }
-        }
-
-        @media (max-width:767px) {
-          .app { position:relative; }
-          .sidebar {
-            position:fixed; top:0; left:0; bottom:0; z-index:100;
-            transform:translateX(-100%); transition:transform .3s ease;
-            width:280px; min-width:280px;
-          }
-          .sidebar.open { transform:translateX(0); animation:slideIn .3s ease; }
-          .mobile-overlay { display:block; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:99; backdrop-filter:blur(2px); }
-          .mobile-topbar {
-            display:flex; align-items:center; justify-content:space-between;
-            padding:12px 16px; border-bottom:1px solid var(--border);
-            background:var(--panel); flex-shrink:0;
-          }
-          .hamburger { background:none; border:1px solid var(--border2); border-radius:8px; color:var(--text); font-size:18px; padding:6px 10px; cursor:pointer; }
-          .main { overflow:hidden; }
-          .main-topbar { padding:12px 16px; display:none; }
-          .workspace { flex-direction:column; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-          .controls { width:100%; min-width:unset; border-right:none; border-bottom:1px solid var(--border); overflow-y:visible; padding:16px; }
-          .canvas { padding:16px; justify-content:flex-start; min-height:400px; }
-          .history-view { padding:16px; }
-          .profile-view { padding:16px; }
-          .loading-card { aspect-ratio:1/1; }
+        @media (min-width: 768px) and (max-width: 1024px) {
+          :root { --sidebar-w: 290px; }
+          .brand-name { font-size: 26px; }
+          .sidebar-section { padding: 15px 18px; }
+          .generate-wrap { padding: 15px 18px 20px; }
+          .main-header { padding: 15px 22px; }
+          .canvas-area { padding: 20px 22px; }
+          .history-strip { padding: 12px 22px; }
         }
       `}</style>
 
-      {toast && <Toast msg={toast.msg} type={toast.type} />}
-
-      {/* Mobile overlay */}
-      {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
-
-      <div className="app">
-        {/* ── SIDEBAR ── */}
-        <aside className={"sidebar" + (sidebarOpen ? " open" : "")}>
-          <div className="sidebar-brand">
-            <span className="brand-icon">⬡</span>
-            <span className="brand-text">RP VISION AI</span>
-            <span className="brand-version">V2</span>
+      {/* DESKTOP */}
+      <div className="desktop-layout">
+        <aside className="sidebar">
+          <div className="brand">
+            <div className="brand-name">RP VISION AI</div>
+            <div className="brand-sub">AI Image Generator</div>
           </div>
-
-          {/* Credits */}
-          <div className="credits-bar">
-            <div className="credits-row">
-              <span className="credits-label">Daily Credits</span>
-              <span className="credits-count">{creditsLeft} / {FREE_CREDITS_PER_DAY}</span>
-            </div>
-            <div className="credits-track">
-              <div className="credits-fill" style={{ width: (creditsLeft / FREE_CREDITS_PER_DAY * 100) + "%" }} />
+          <div className="sidebar-section">
+            <div className="section-label">Describe Your Vision</div>
+            <div className="prompt-wrapper">
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value.slice(0, 500))}
+                placeholder="A surreal landscape where ancient temples float above glowing neon oceans at dusk..."
+                rows={5}
+                onKeyDown={e => { if (e.key === "Enter" && e.metaKey) generate(); }}
+              />
+              <span className="char-count">{prompt.length}/500</span>
             </div>
           </div>
-
-          {/* Tools */}
-          <div className="nav-section">
-            <div className="nav-section-label">AI Tools</div>
-            {TOOLS.map(t => (
-              <div key={t.id}
-                className={"nav-item" + (activeTool.id === t.id && view === "create" ? " active" : "")}
-                onClick={() => { setActiveTool(t); setView("create"); setResult(null); setError(null); setSidebarOpen(false); }}>
-                <span className="nav-icon">{t.icon}</span>
-                <span className="nav-label">{t.label}</span>
-                <span className="nav-credits">{t.credits}cr</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Views */}
-          <div className="sidebar-views">
-            <div className={"view-btn" + (view === "history" ? " active" : "")} onClick={() => { setView("history"); setSidebarOpen(false); }}>
-              <span className="view-icon">◫</span>
-              <span className="view-label">History</span>
-            </div>
-            <div className={"view-btn" + (view === "profile" ? " active" : "")} onClick={() => { setView("profile"); setSidebarOpen(false); }}>
-              <span className="view-icon">◯</span>
-              <span className="view-label">Profile</span>
+          <div className="sidebar-section">
+            <div className="section-label">Quick Inspiration</div>
+            <div className="examples">
+              {EXAMPLE_PROMPTS.map((p, i) => (
+                <button key={i} className="example-btn" onClick={() => setPrompt(p)}>✦ {p}</button>
+              ))}
             </div>
           </div>
-
-          {/* User */}
-          <div className="sidebar-user">
-            <img className="user-avatar" src={user.photoURL} alt="" />
-            <div className="user-info">
-              <div className="user-name">{user.displayName}</div>
-              <div className="user-plan">FREE PLAN</div>
+          <div className="sidebar-section">
+            <div className="section-label">Art Style</div>
+            <div className="style-grid">
+              {STYLE_PRESETS.map((s, i) => (
+                <div key={i} className={`style-card ${selectedStyle === i ? "active" : ""}`}
+                  onClick={() => setSelectedStyle(selectedStyle === i ? null : i)}>
+                  <span className="style-icon">{s.icon}</span>
+                  <span className="style-label">{s.label}</span>
+                </div>
+              ))}
             </div>
-            <button className="logout-btn" onClick={handleLogout}>Out</button>
+          </div>
+          <div className="sidebar-section">
+            <div className="section-label">Aspect Ratio</div>
+            <div className="ratio-row">
+              {ASPECT_RATIOS.map((r, i) => (
+                <div key={i} className={`ratio-btn ${selectedRatio === i ? "active" : ""}`}
+                  onClick={() => setSelectedRatio(i)}>
+                  <span className="ratio-icon">{r.icon}</span>
+                  <span className="ratio-text">{r.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="generate-wrap">
+            <button className="generate-btn" disabled={!prompt.trim() || loading} onClick={generate}>
+              {loading ? "GENERATING..." : "✦ GENERATE IMAGE"}
+            </button>
           </div>
         </aside>
 
-        {/* ── MAIN ── */}
         <main className="main">
-
-          {/* Mobile topbar */}
-          <div className="mobile-topbar">
-            <button className="hamburger" onClick={() => setSidebarOpen(true)}>☰</button>
-            <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:18, letterSpacing:3, color:"var(--accent)" }}>RP VISION AI</span>
-            <span style={{ fontSize:11, color:"var(--muted2)" }}>{creditsLeft}cr left</span>
-          </div>
-
-          {/* Desktop topbar */}
-          <div className="main-topbar">
-            <div>
-              <div className="topbar-title">{activeTool.label}</div>
-              <div className="topbar-desc">{activeTool.desc}</div>
+          <div className="main-header">
+            <div className="status-row">
+              <div className={`status-dot ${loading ? "loading" : ""}`} />
+              {loading ? <><TypingDots />&nbsp; Crafting your image...</> : "Ready to create"}
             </div>
-            <div className="topbar-right">
-              <div className={"status-dot" + (loading ? " busy" : "")} />
-              {view === "history" && <span className="topbar-badge">{history.length} items</span>}
-              {view === "create" && <span className="topbar-badge">{creditsLeft} credits left</span>}
-            </div>
+            {history.length > 0 && (
+              <span className="history-badge">{history.length} image{history.length > 1 ? "s" : ""} created</span>
+            )}
           </div>
-
-          {/* Progress */}
-          <div className="progress-bar">
-            <div className="progress-fill-bar" style={{ width: progress + "%" }} />
+          <div className="canvas-area">
+            {loading && (
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            )}
+            {!loading && !imageUrl && !error && (
+              <div className="empty-state">
+                <div className="empty-glyph">◈</div>
+                <div className="empty-title">YOUR CANVAS AWAITS</div>
+                <div className="empty-hint">Describe your vision in the sidebar and hit Generate</div>
+              </div>
+            )}
+            {loading && (
+              <div className="loading-box">
+                <div className="spinner" />
+                <div className="loading-title">CRAFTING YOUR IMAGE</div>
+                <div className="loading-sub">This may take 10–30 seconds...</div>
+              </div>
+            )}
+            {error && !loading && <div className="error-box">⚠ {error}</div>}
+            {imageUrl && !loading && (
+              <>
+                <div className="image-frame">
+                  <img src={imageUrl} alt="Generated" />
+                  <div className="img-overlay">
+                    <button className="img-btn" onClick={downloadImage}>↓ Download</button>
+                    <button className="img-btn" onClick={() => { setImageUrl(null); setError(null); }}>✕ Clear</button>
+                    <button className="img-btn" onClick={generate}>↻ Regenerate</button>
+                  </div>
+                </div>
+                <div className="prompt-caption">"{prompt}"</div>
+              </>
+            )}
           </div>
-
-          {/* ── CREATE VIEW ── */}
-          {view === "create" && (
-            <div className="workspace">
-              {/* Controls */}
-              <div className="controls">
-                {/* Prompt */}
-                {!["upscale", "remove-bg"].includes(activeTool.id) && (
-                  <div className="ctrl-section">
-                    <div className="ctrl-label">Prompt</div>
-                    <div className="prompt-wrap">
-                      <textarea
-                        value={prompt}
-                        onChange={e => setPrompt(e.target.value.slice(0, 500))}
-                        placeholder={
-                          activeTool.id === "text-to-audio" ? "Describe the music or sound you want..." :
-                          activeTool.id === "image-to-video" ? "Describe how to animate this image..." :
-                          "Describe what you want to create..."
-                        }
-                        rows={4}
-                      />
-                      <span className="char-count">{prompt.length}/500</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Image input */}
-                {needsImageInput && (
-                  <div className="ctrl-section">
-                    <div className="ctrl-label">Input Image URL</div>
-                    <input
-                      className="url-input"
-                      value={inputImageUrl}
-                      onChange={e => setInputImageUrl(e.target.value)}
-                      placeholder="Paste image URL here..."
-                    />
-                    {inputImageUrl && (
-                      <img src={inputImageUrl} alt="" className="uploaded-preview" onError={e => e.target.style.display="none"} />
-                    )}
-                  </div>
-                )}
-
-                {/* Style presets */}
-                {["text-to-image", "image-to-image"].includes(activeTool.id) && (
-                  <div className="ctrl-section">
-                    <div className="ctrl-label">Art Style</div>
-                    <div className="style-grid">
-                      {STYLES.map((s, i) => (
-                        <div key={i} className={"style-pill" + (style === i ? " active" : "")}
-                          onClick={() => setStyle(style === i ? null : i)}>
-                          {s.label}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Generate button */}
-                <button className="gen-btn" disabled={loading || creditsLeft < activeTool.credits} onClick={generate}>
-                  {loading ? <><Spinner />&nbsp;Generating...</> : <>
-                    {activeTool.icon}&nbsp;Generate
-                    <span className="gen-btn-credits">{activeTool.credits} cr</span>
-                  </>}
-                </button>
-
-                {creditsLeft < activeTool.credits && !loading && (
-                  <div style={{ fontSize:11, color:"var(--red)", textAlign:"center" }}>
-                    Not enough credits. Resets at midnight.
-                  </div>
-                )}
-              </div>
-
-              {/* Canvas */}
-              <div className="canvas">
-                {!loading && !result && !error && (
-                  <div className="empty-state">
-                    <div className="empty-icon">{activeTool.icon}</div>
-                    <div className="empty-title">{activeTool.label}</div>
-                    <div className="empty-sub">{activeTool.desc}</div>
-                  </div>
-                )}
-
-                {loading && (
-                  <div className="loading-card">
-                    <div className="spinner" />
-                    <div className="loading-label">GENERATING...</div>
-                    <div className="loading-sub-text">This may take 10–30 seconds</div>
-                  </div>
-                )}
-
-                {error && !loading && <div className="error-box">⚠ {error}</div>}
-
-                {result && !loading && (
-                  <>
-                    {result.type === "image" && (
-                      <div className="result-frame">
-                        <img src={result.url} alt="Generated" />
-                        <div className="result-overlay">
-                          <button className="overlay-btn" onClick={() => download(result.url)}>↓ Download</button>
-                          <button className="overlay-btn" onClick={() => setResult(null)}>✕ Clear</button>
-                          <button className="overlay-btn" onClick={generate}>↻ Redo</button>
-                        </div>
-                      </div>
-                    )}
-                    {result.type === "audio" && (
-                      <div className="audio-player">
-                        <div className="audio-label">◎ GENERATED AUDIO</div>
-                        <audio controls src={result.url} style={{ width:"100%", marginTop:10 }} />
-                        <button className="overlay-btn" style={{ marginTop:10 }} onClick={() => download(result.url, "mp3")}>↓ Download Audio</button>
-                      </div>
-                    )}
-                    {prompt && <div className="result-caption">"{prompt}"</div>}
-                  </>
-                )}
-              </div>
+          {history.length > 0 && (
+            <div className="history-strip">
+              <span className="history-label">History</span>
+              {history.map((h, i) => (
+                <div key={i} className="history-thumb" onClick={() => setImageUrl(h.url)} title={h.prompt}>
+                  <img src={h.url} alt="" />
+                </div>
+              ))}
             </div>
           )}
+        </main>
+      </div>
 
-          {/* ── HISTORY VIEW ── */}
-          {view === "history" && (
-            <div className="history-view">
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3, color:"var(--text)" }}>Generation History</div>
-                <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Your last 20 generations</div>
-              </div>
-              {historyLoading ? (
-                <div style={{ display:"flex", justifyContent:"center", padding:60 }}><Spinner /></div>
-              ) : history.length === 0 ? (
-                <div className="history-empty">
-                  <div style={{ fontSize:44, opacity:.3 }}>◫</div>
-                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:3, color:"var(--muted2)" }}>NO HISTORY YET</div>
-                  <div style={{ fontSize:12, color:"var(--muted)" }}>Generate something to see it here</div>
+      {/* MOBILE */}
+      <div className="mobile-layout">
+        <div className="mobile-topbar">
+          <div className="mobile-brand">RP VISION AI</div>
+          <div className="mobile-status">
+            <div style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: loading ? "var(--accent)" : "var(--green)",
+              boxShadow: loading ? "0 0 7px var(--accent-glow)" : "0 0 7px var(--green)",
+              animation: "blink 2s infinite"
+            }} />
+            {loading ? "Generating..." : "Ready"}
+          </div>
+        </div>
+
+        <div className="mobile-tabs">
+          <button className={`mobile-tab ${mobileTab === "create" ? "active" : ""}`} onClick={() => setMobileTab("create")}>
+            ✦ Create
+          </button>
+          <button className={`mobile-tab ${mobileTab === "result" ? "active" : ""}`} onClick={() => setMobileTab("result")}>
+            Result {history.length > 0 ? `(${history.length})` : ""}
+          </button>
+        </div>
+
+        {mobileTab === "create" && (
+          <>
+            <div className="mobile-create">
+              <div>
+                <div className="m-label">Your Vision</div>
+                <div className="prompt-wrapper">
+                  <textarea
+                    ref={textareaRef}
+                    className="mobile-textarea"
+                    value={prompt}
+                    onChange={e => { setPrompt(e.target.value.slice(0, 500)); autoResize(); }}
+                    placeholder="Describe what you want to create..."
+                    rows={4}
+                  />
+                  <span className="char-count" style={{ bottom: 13, right: 13 }}>{prompt.length}/500</span>
                 </div>
-              ) : (
-                <div className="history-grid">
-                  {history.map(h => (
-                    <div key={h.id} className="history-card" onClick={() => { setResult({ type:"image", url:h.outputUrl }); setActiveTool(TOOLS.find(t=>t.id===h.toolId)||TOOLS[0]); setView("create"); }}>
-                      <img className="history-img" src={h.outputUrl} alt="" onError={e => e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"} />
-                      <div className="history-info">
-                        <div className="history-tool">{h.toolId?.replace(/-/g," ")}</div>
-                        <div className="history-prompt">{h.prompt || "No prompt"}</div>
-                      </div>
+              </div>
+              <div>
+                <div className="m-label">Quick Inspiration</div>
+                <div className="mobile-examples">
+                  {EXAMPLE_PROMPTS.map((p, i) => (
+                    <button key={i} className="mobile-chip" onClick={() => setPrompt(p)}>✦ {p}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="m-label">Art Style</div>
+                <div className="mobile-style-grid">
+                  {STYLE_PRESETS.map((s, i) => (
+                    <div key={i} className={`mobile-style-card ${selectedStyle === i ? "active" : ""}`}
+                      onClick={() => setSelectedStyle(selectedStyle === i ? null : i)}>
+                      <span className="m-style-icon">{s.icon}</span>
+                      <span className="m-style-label">{s.label}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* ── PROFILE VIEW ── */}
-          {view === "profile" && (
-            <div className="profile-view">
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3, color:"var(--text)" }}>My Profile</div>
-                <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Manage your account</div>
               </div>
-              <div className="profile-card">
-                <div className="profile-header">
-                  <img className="profile-avatar" src={user.photoURL} alt="" />
-                  <div>
-                    <div className="profile-name">{user.displayName}</div>
-                    <div className="profile-email">{user.email}</div>
-                    <div className="profile-plan">FREE PLAN</div>
-                  </div>
+              <div>
+                <div className="m-label">Aspect Ratio</div>
+                <div className="mobile-ratio">
+                  {ASPECT_RATIOS.map((r, i) => (
+                    <div key={i} className={`mobile-ratio-btn ${selectedRatio === i ? "active" : ""}`}
+                      onClick={() => setSelectedRatio(i)}>
+                      <span className="m-ratio-icon">{r.icon}</span>
+                      <span className="m-ratio-text">{r.label}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="stats-grid">
-                  <div className="stat-card">
-                    <div className="stat-value">{creditsLeft}</div>
-                    <div className="stat-label">Credits Left Today</div>
-                  </div>
-                  <div className="stat-card">
-                    <div className="stat-value">{creditsUsed}</div>
-                    <div className="stat-label">Credits Used Today</div>
-                  </div>
-                  <div className="stat-card">
-                    <div className="stat-value">{FREE_CREDITS_PER_DAY}</div>
-                    <div className="stat-label">Daily Free Credits</div>
-                  </div>
-                  <div className="stat-card">
-                    <div className="stat-value">7</div>
-                    <div className="stat-label">AI Tools Available</div>
-                  </div>
-                </div>
-                <button className="upgrade-btn" onClick={() => showToast("Payment coming soon! 🚀", "info")}>
-                  ⬡ UPGRADE TO PRO — COMING SOON
-                </button>
-                <button style={{ background:"none", border:"1px solid rgba(231,76,60,.3)", borderRadius:10, color:"var(--red)", padding:"10px", cursor:"pointer", fontSize:13, fontWeight:500 }} onClick={handleLogout}>
-                  Sign Out
-                </button>
               </div>
             </div>
-          )}
+            <div className="mobile-gen-bar">
+              <button className="mobile-gen-btn" disabled={!prompt.trim() || loading} onClick={generate}>
+                {loading ? "GENERATING..." : "✦ GENERATE IMAGE"}
+              </button>
+            </div>
+          </>
+        )}
 
-        </main>
+        {mobileTab === "result" && (
+          <div className="mobile-result">
+            {loading && (
+              <div className="m-progress-track">
+                <div className="m-progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            )}
+            {!loading && !imageUrl && !error && (
+              <div className="mobile-empty">
+                <div style={{ fontSize: 48, opacity: 0.25 }}>◈</div>
+                <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, letterSpacing: 3, color: "var(--muted2)" }}>
+                  NO IMAGE YET
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 300 }}>
+                  Go to Create tab and generate
+                </div>
+              </div>
+            )}
+            {loading && (
+              <div className="mobile-loading-box">
+                <div className="spinner" />
+                <div className="loading-title">CRAFTING YOUR IMAGE</div>
+                <div className="loading-sub">10–30 seconds...</div>
+              </div>
+            )}
+            {error && !loading && <div className="error-box">⚠ {error}</div>}
+            {imageUrl && !loading && (
+              <>
+                <div className="mobile-image-frame">
+                  <img src={imageUrl} alt="Generated" />
+                </div>
+                <div className="mobile-action-row">
+                  <button className="mobile-action-btn" onClick={downloadImage}>↓ Save</button>
+                  <button className="mobile-action-btn" onClick={() => { setImageUrl(null); setError(null); }}>✕ Clear</button>
+                  <button className="mobile-action-btn" onClick={generate}>↻ Redo</button>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted2)", fontStyle: "italic", textAlign: "center", fontWeight: 300, lineHeight: 1.5, padding: "0 8px", width: "100%" }}>
+                  "{prompt}"
+                </div>
+              </>
+            )}
+            {history.length > 0 && (
+              <div style={{ width: "100%" }}>
+                <div className="m-label">Recent History</div>
+                <div className="mobile-history-grid">
+                  {history.map((h, i) => (
+                    <div key={i} className="mobile-history-thumb" onClick={() => setImageUrl(h.url)} title={h.prompt}>
+                      <img src={h.url} alt="" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
