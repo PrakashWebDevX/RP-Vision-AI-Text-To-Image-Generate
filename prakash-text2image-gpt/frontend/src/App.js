@@ -319,7 +319,7 @@ function LoginScreen({ onLogin }) {
           <div className="rp-left">
             <div className="rp-logo-wrap">
               <div className="rp-logo-glow" />
-              <div className="rp-logo-placeholder">⬡</div>
+              <img src="/logo192.png" alt="RP Vision AI" className="rp-logo-img" />
             </div>
 
             <div className="rp-brand-name">RP Vision AI</div>
