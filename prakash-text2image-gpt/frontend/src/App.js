@@ -9,22 +9,22 @@ import {
 const BACKEND = "https://rp-vision-backend.onrender.com";
 
 const TOOLS = [
-  { id: "text-to-image",   label: "Text to Image",       icon: "⬡", credits: 1, desc: "Generate images from text prompts" },
-  { id: "image-to-image",  label: "Image to Image",      icon: "⬢", credits: 2, desc: "Transform images with AI" },
-  { id: "text-to-video",   label: "Text to Video",       icon: "◈", credits: 5, desc: "Generate videos from prompts" },
-  { id: "image-to-video",  label: "Image to Video",      icon: "◉", credits: 5, desc: "Animate any image with AI" },
-  { id: "text-to-audio",   label: "Text to Audio",       icon: "◎", credits: 3, desc: "Generate audio from text" },
-  { id: "upscale",         label: "Image Upscaler",      icon: "◐", credits: 2, desc: "Upscale images to HD quality" },
-  { id: "remove-bg",       label: "Remove Background",   icon: "◑", credits: 1, desc: "Remove image backgrounds instantly" },
+  { id: "text-to-image", label: "Text to Image", icon: "⬡", credits: 1, desc: "Generate images from text prompts" },
+  { id: "image-to-image", label: "Image to Image", icon: "⬢", credits: 2, desc: "Transform images with AI" },
+  { id: "text-to-video", label: "Text to Video", icon: "◈", credits: 5, desc: "Generate videos from prompts" },
+  { id: "image-to-video", label: "Image to Video", icon: "◉", credits: 5, desc: "Animate any image with AI" },
+  { id: "text-to-audio", label: "Text to Audio", icon: "◎", credits: 3, desc: "Generate audio from text" },
+  { id: "upscale", label: "Image Upscaler", icon: "◐", credits: 2, desc: "Upscale images to HD quality" },
+  { id: "remove-bg", label: "Remove Background", icon: "◑", credits: 1, desc: "Remove image backgrounds instantly" },
 ];
 
 const STYLES = [
   { label: "Photorealistic", tag: "photorealistic, 8k ultra detailed, RAW photo" },
-  { label: "Cinematic",      tag: "cinematic lighting, movie still, dramatic, anamorphic" },
-  { label: "Anime",          tag: "anime style, studio ghibli, vibrant, detailed illustration" },
-  { label: "Oil Paint",      tag: "oil painting, classical art, textured canvas, masterpiece" },
-  { label: "Cyberpunk",      tag: "cyberpunk, neon lights, futuristic, blade runner aesthetic" },
-  { label: "Fantasy",        tag: "fantasy art, magical, ethereal lighting, concept art" },
+  { label: "Cinematic", tag: "cinematic lighting, movie still, dramatic, anamorphic" },
+  { label: "Anime", tag: "anime style, studio ghibli, vibrant, detailed illustration" },
+  { label: "Oil Paint", tag: "oil painting, classical art, textured canvas, masterpiece" },
+  { label: "Cyberpunk", tag: "cyberpunk, neon lights, futuristic, blade runner aesthetic" },
+  { label: "Fantasy", tag: "fantasy art, magical, ethereal lighting, concept art" },
 ];
 
 const FREE_CREDITS_PER_DAY = 10;
@@ -91,38 +91,325 @@ function Toast({ msg, type }) {
 }
 
 // ── LOGIN SCREEN ───────────────────────────────────────────
+// ── LOGIN SCREEN ───────────────────────────────────────────
 function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
+
   const handleLogin = async () => {
     setLoading(true);
     try { await onLogin(); } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    // Generate particles
+    const container = document.getElementById("rp-particles");
+    if (!container) return;
+    const colors = ["#00d4ff", "#8b5cf6", "#ff2d78", "#ffffff"];
+    for (let i = 0; i < 40; i++) {
+      const p = document.createElement("div");
+      p.className = "rp-particle";
+      const angle = Math.random() * 360;
+      const dist = 100 + Math.random() * 300;
+      const rad = (angle * Math.PI) / 180;
+      p.style.cssText = `
+        left:${Math.random() * 100}%;top:${Math.random() * 100}%;
+        width:${1 + Math.random() * 2}px;height:${1 + Math.random() * 2}px;
+        background:${colors[Math.floor(Math.random() * colors.length)]};
+        --dx:${Math.cos(rad) * dist}px;--dy:${Math.sin(rad) * dist}px;
+        animation-duration:${5 + Math.random() * 10}s;
+        animation-delay:${-Math.random() * 15}s;
+        box-shadow:0 0 4px currentColor;
+      `;
+      container.appendChild(p);
+    }
+    return () => { if (container) container.innerHTML = ""; };
+  }, []);
+
   return (
-    <div className="login-screen">
-      <div className="login-bg" />
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="login-logo-icon">⬡</span>
-          <span className="login-logo-text">RP VISION AI</span>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@300;400;500;600&display=swap');
+
+        .rp-login-root *, .rp-login-root *::before, .rp-login-root *::after { margin:0; padding:0; box-sizing:border-box; }
+
+        .rp-login-root {
+          --cyan:#00d4ff; --purple:#8b5cf6; --pink:#ff2d78;
+          --dark:#000000; --card-bg:rgba(5,5,20,0.85);
+          position:fixed; inset:0; z-index:9999;
+          font-family:'Rajdhani',sans-serif; background:#000; color:#fff; overflow:hidden;
+        }
+
+        .rp-bg {
+          position:absolute; inset:0; z-index:0;
+          background:
+            radial-gradient(ellipse at 20% 50%,rgba(0,212,255,.06) 0%,transparent 55%),
+            radial-gradient(ellipse at 80% 50%,rgba(255,45,120,.06) 0%,transparent 55%),
+            radial-gradient(ellipse at 50% 50%,rgba(139,92,246,.05) 0%,transparent 60%),#000;
+        }
+        .rp-grid {
+          position:absolute; inset:0; z-index:0;
+          background-image:linear-gradient(rgba(0,212,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.04) 1px,transparent 1px);
+          background-size:60px 60px;
+        }
+        .rp-orb { position:absolute; border-radius:50%; filter:blur(80px); opacity:0; animation:rpDrift 12s ease-in-out infinite; pointer-events:none; }
+        .rp-orb-1 { width:500px;height:500px;left:-150px;top:-150px;background:radial-gradient(circle,rgba(0,212,255,.25),transparent 70%);animation-delay:0s; }
+        .rp-orb-2 { width:400px;height:400px;right:-100px;bottom:-100px;background:radial-gradient(circle,rgba(255,45,120,.25),transparent 70%);animation-delay:-4s; }
+        .rp-orb-3 { width:350px;height:350px;left:40%;top:20%;background:radial-gradient(circle,rgba(139,92,246,.2),transparent 70%);animation-delay:-8s; }
+        @keyframes rpDrift {
+          0%{opacity:0;transform:scale(.8) translate(0,0)}
+          20%{opacity:1}
+          50%{transform:scale(1.1) translate(30px,-20px)}
+          80%{opacity:1}
+          100%{opacity:0;transform:scale(.8) translate(0,0)}
+        }
+
+        #rp-particles { position:absolute; inset:0; z-index:0; overflow:hidden; }
+        .rp-particle { position:absolute; width:2px; height:2px; border-radius:50%; animation:rpShoot linear infinite; opacity:0; }
+        @keyframes rpShoot {
+          0%{opacity:0;transform:translate(0,0)} 10%{opacity:1} 90%{opacity:1} 100%{opacity:0;transform:translate(var(--dx),var(--dy))}
+        }
+
+        .rp-page { position:relative; z-index:1; display:flex; height:100vh; }
+
+        /* LEFT */
+        .rp-left {
+          flex:1.1; display:flex; flex-direction:column; justify-content:center;
+          align-items:center; padding:60px; position:relative;
+        }
+        .rp-left::after {
+          content:''; position:absolute; right:0; top:10%; bottom:10%; width:1px;
+          background:linear-gradient(to bottom,transparent,rgba(0,212,255,.4) 30%,rgba(139,92,246,.6) 50%,rgba(255,45,120,.4) 70%,transparent);
+        }
+        .rp-logo-wrap { position:relative; animation:rpFloat 6s ease-in-out infinite; }
+        @keyframes rpFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+        .rp-logo-glow {
+          position:absolute; inset:-40px;
+          background:radial-gradient(ellipse,rgba(139,92,246,.3) 0%,rgba(0,212,255,.15) 40%,transparent 70%);
+          animation:rpPulse 3s ease-in-out infinite; border-radius:50%;
+        }
+        @keyframes rpPulse { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
+        .rp-logo-img {
+          width:200px; height:200px; object-fit:contain; position:relative; z-index:1;
+          filter:drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3));
+          border-radius:50%;
+        }
+        .rp-logo-placeholder {
+          width:200px; height:200px; position:relative; z-index:1; display:flex; align-items:center; justify-content:center;
+          font-size:80px; filter:drop-shadow(0 0 30px rgba(0,212,255,.5));
+        }
+        .rp-brand-name {
+          margin-top:28px; font-family:'Orbitron',monospace; font-size:2rem; font-weight:900;
+          letter-spacing:.15em; text-align:center; text-transform:uppercase;
+          background:linear-gradient(135deg,#00d4ff 0%,#8b5cf6 50%,#ff2d78 100%);
+          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        }
+        .rp-tagline { margin-top:10px; font-size:.85rem; letter-spacing:.4em; text-transform:uppercase; color:rgba(255,255,255,.35); text-align:center; }
+
+        .rp-stats { display:flex; gap:32px; margin-top:50px; }
+        .rp-stat { text-align:center; position:relative; }
+        .rp-stat::after { content:''; position:absolute; right:-16px; top:20%; bottom:20%; width:1px; background:rgba(255,255,255,.1); }
+        .rp-stat:last-child::after { display:none; }
+        .rp-stat-num {
+          font-family:'Orbitron',monospace; font-size:1.6rem; font-weight:800;
+          background:linear-gradient(135deg,#00d4ff,#8b5cf6);
+          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        }
+        .rp-stat-label { font-size:.7rem; letter-spacing:.15em; text-transform:uppercase; color:rgba(255,255,255,.4); margin-top:4px; }
+
+        .rp-features { display:flex; flex-direction:column; gap:14px; margin-top:48px; align-self:flex-start; width:100%; max-width:340px; }
+        .rp-feature {
+          display:flex; align-items:center; gap:14px; padding:12px 18px;
+          border:1px solid rgba(0,212,255,.12); border-radius:10px;
+          background:rgba(0,212,255,.03); transition:all .3s; cursor:default;
+        }
+        .rp-feature:hover { border-color:rgba(0,212,255,.35); background:rgba(0,212,255,.07); transform:translateX(5px); }
+        .rp-fi { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+        .rp-fi-c { background:rgba(0,212,255,.15); }
+        .rp-fi-p { background:rgba(139,92,246,.15); }
+        .rp-fi-q { background:rgba(255,45,120,.15); }
+        .rp-ft { font-size:.88rem; color:rgba(255,255,255,.65); }
+        .rp-ft strong { color:#fff; font-weight:600; display:block; font-size:.92rem; }
+
+        /* RIGHT / CARD */
+        .rp-right { flex:.9; display:flex; align-items:center; justify-content:center; padding:40px; }
+        .rp-card {
+          width:100%; max-width:420px; background:var(--card-bg);
+          border:1px solid rgba(139,92,246,.25); border-radius:20px; padding:48px 44px;
+          position:relative; backdrop-filter:blur(20px);
+          box-shadow:0 0 0 1px rgba(0,212,255,.05),0 30px 80px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
+          animation:rpCardIn .8s cubic-bezier(.16,1,.3,1) both;
+        }
+        @keyframes rpCardIn { from{opacity:0;transform:translateY(30px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+        .rp-card::before,.rp-card::after { content:''; position:absolute; width:20px; height:20px; border-color:#00d4ff; border-style:solid; opacity:.5; }
+        .rp-card::before { top:-1px; left:-1px; border-width:2px 0 0 2px; border-radius:20px 0 0 0; }
+        .rp-card::after  { bottom:-1px; right:-1px; border-width:0 2px 2px 0; border-radius:0 0 20px 0; }
+
+        .rp-scanline {
+          position:absolute; left:0; right:0; height:2px;
+          background:linear-gradient(90deg,transparent,rgba(0,212,255,.4),rgba(139,92,246,.4),transparent);
+          top:0; border-radius:20px 20px 0 0; animation:rpScan 4s ease-in-out infinite;
+        }
+        @keyframes rpScan { 0%{top:0%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{top:100%;opacity:0} }
+
+        .rp-card-title {
+          font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700;
+          letter-spacing:.08em; margin-bottom:6px;
+          background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,.75) 100%);
+          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        }
+        .rp-card-sub { font-size:.88rem; color:rgba(255,255,255,.4); letter-spacing:.05em; margin-bottom:38px; }
+
+        .rp-btn-google {
+          width:100%; display:flex; align-items:center; justify-content:center; gap:14px;
+          padding:15px 24px; background:rgba(255,255,255,.04);
+          border:1px solid rgba(255,255,255,.15); border-radius:12px;
+          color:#fff; font-family:'Rajdhani',sans-serif; font-size:1rem; font-weight:600;
+          letter-spacing:.08em; cursor:pointer; position:relative; overflow:hidden;
+          transition:all .3s ease;
+        }
+        .rp-btn-google:hover:not(:disabled) {
+          background:rgba(255,255,255,.08); border-color:rgba(0,212,255,.45);
+          box-shadow:0 0 24px rgba(0,212,255,.15),0 0 60px rgba(139,92,246,.08);
+          transform:translateY(-2px);
+        }
+        .rp-btn-google:disabled { opacity:.7; cursor:not-allowed; }
+        .rp-btn-google::before {
+          content:''; position:absolute; inset:0;
+          background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(139,92,246,.07),rgba(255,45,120,.07));
+          opacity:0; transition:opacity .3s;
+        }
+        .rp-btn-google:hover::before { opacity:1; }
+        .rp-g-icon { width:22px; height:22px; flex-shrink:0; }
+        .rp-arrow { position:absolute; right:18px; opacity:0; transform:translateX(-6px); transition:all .3s ease; font-size:1.1rem; }
+        .rp-btn-google:hover:not(:disabled) .rp-arrow { opacity:1; transform:translateX(0); color:#00d4ff; }
+        .rp-btn-spinner { width:20px; height:20px; border:2px solid rgba(0,212,255,.2); border-top-color:#00d4ff; border-radius:50%; animation:rpSpin .8s linear infinite; }
+        @keyframes rpSpin { to{transform:rotate(360deg)} }
+
+        .rp-divider { display:flex; align-items:center; gap:14px; margin:30px 0; color:rgba(255,255,255,.2); font-size:.75rem; letter-spacing:.15em; }
+        .rp-divider::before,.rp-divider::after { content:''; flex:1; height:1px; background:linear-gradient(to right,transparent,rgba(255,255,255,.1),transparent); }
+
+        .rp-coming { text-align:center; color:rgba(255,255,255,.3); font-size:.85rem; letter-spacing:.05em; }
+
+        .rp-trust { display:flex; justify-content:space-between; margin-top:28px; gap:8px; }
+        .rp-trust-item { display:flex; align-items:center; gap:6px; font-size:.72rem; color:rgba(255,255,255,.3); letter-spacing:.05em; }
+        .rp-tdot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+        .rp-tdot-c { background:#00d4ff; box-shadow:0 0 6px #00d4ff; }
+        .rp-tdot-p { background:#8b5cf6; box-shadow:0 0 6px #8b5cf6; }
+        .rp-tdot-q { background:#ff2d78; box-shadow:0 0 6px #ff2d78; }
+
+        .rp-terms { margin-top:24px; font-size:.72rem; color:rgba(255,255,255,.2); text-align:center; line-height:1.7; }
+        .rp-terms a { color:rgba(0,212,255,.6); text-decoration:none; transition:color .2s; }
+        .rp-terms a:hover { color:#00d4ff; }
+
+        @media (max-width:768px) {
+          .rp-page { flex-direction:column; height:auto; min-height:100vh; overflow-y:auto; }
+          .rp-left { padding:50px 30px 30px; }
+          .rp-left::after { display:none; }
+          .rp-logo-img,.rp-logo-placeholder { width:130px; height:130px; font-size:56px; }
+          .rp-brand-name { font-size:1.4rem; }
+          .rp-stats { gap:20px; }
+          .rp-features { max-width:100%; }
+          .rp-right { padding:24px 24px 50px; }
+          .rp-card { padding:36px 28px; }
+          .rp-login-root { overflow-y:auto; }
+        }
+      `}</style>
+
+      <div className="rp-login-root">
+        <div className="rp-bg" />
+        <div className="rp-grid" />
+        <div className="rp-orb rp-orb-1" />
+        <div className="rp-orb rp-orb-2" />
+        <div className="rp-orb rp-orb-3" />
+        <div id="rp-particles" />
+
+        <div className="rp-page">
+          {/* LEFT BRAND PANEL */}
+          <div className="rp-left">
+            <div className="rp-logo-wrap">
+              <div className="rp-logo-glow" />
+              <div className="rp-logo-placeholder">⬡</div>
+            </div>
+
+            <div className="rp-brand-name">RP Vision AI</div>
+            <div className="rp-tagline">Create Without Limits</div>
+
+            <div className="rp-stats">
+              <div className="rp-stat">
+                <div className="rp-stat-num">7</div>
+                <div className="rp-stat-label">AI Models</div>
+              </div>
+              <div className="rp-stat">
+                <div className="rp-stat-num">10</div>
+                <div className="rp-stat-label">Free Credits</div>
+              </div>
+              <div className="rp-stat">
+                <div className="rp-stat-num">4K</div>
+                <div className="rp-stat-label">Output</div>
+              </div>
+            </div>
+
+            <div className="rp-features">
+              <div className="rp-feature">
+                <div className="rp-fi rp-fi-c">⚡</div>
+                <div className="rp-ft"><strong>Instant Generation</strong>Text to image in seconds</div>
+              </div>
+              <div className="rp-feature">
+                <div className="rp-fi rp-fi-p">🎨</div>
+                <div className="rp-ft"><strong>Multiple Art Styles</strong>Realistic, anime, abstract &amp; more</div>
+              </div>
+              <div className="rp-feature">
+                <div className="rp-fi rp-fi-q">🔓</div>
+                <div className="rp-ft"><strong>Free Forever Plan</strong>10 credits daily, no credit card</div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT LOGIN CARD */}
+          <div className="rp-right">
+            <div className="rp-card">
+              <div className="rp-scanline" />
+
+              <div className="rp-card-title">Welcome Back</div>
+              <div className="rp-card-sub">Sign in to start creating with AI</div>
+
+              <button className="rp-btn-google" onClick={handleLogin} disabled={loading}>
+                {loading ? (
+                  <div className="rp-btn-spinner" />
+                ) : (
+                  <>
+                    <svg className="rp-g-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                    <span>Continue with Google</span>
+                    <span className="rp-arrow">→</span>
+                  </>
+                )}
+              </button>
+
+              <div className="rp-divider">OR</div>
+              <div className="rp-coming">More sign-in options coming soon</div>
+
+              <div className="rp-trust">
+                <div className="rp-trust-item"><div className="rp-tdot rp-tdot-c" /> Secure OAuth</div>
+                <div className="rp-trust-item"><div className="rp-tdot rp-tdot-p" /> Instant Access</div>
+                <div className="rp-trust-item"><div className="rp-tdot rp-tdot-q" /> Free Forever</div>
+              </div>
+
+              <div className="rp-terms">
+                By continuing, you agree to our{" "}
+                <a href="#">Terms of Service</a> &amp; <a href="#">Privacy Policy</a>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="login-tagline">Transform your imagination into reality</div>
-        <div className="login-features">
-          {["7 AI Models", "10 Free Credits/Day", "History Dashboard", "HD Quality"].map(f => (
-            <div key={f} className="login-feature"><span className="lf-dot">◆</span>{f}</div>
-          ))}
-        </div>
-        <button className="login-btn" onClick={handleLogin} disabled={loading}>
-          {loading ? <Spinner /> : <>
-            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Continue with Google
-          </>}
-        </button>
-        <div className="login-footer">Free forever · No credit card needed</div>
       </div>
-    </div>
+    </>
   );
 }
-
 // ── MAIN APP ───────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
@@ -237,13 +524,13 @@ export default function App() {
       let body = {};
       let endpoint = activeTool.id;
 
-      if (activeTool.id === "text-to-image")   body = { prompt: fullPrompt };
-      if (activeTool.id === "image-to-image")   body = { prompt: fullPrompt, image_url: inputImageUrl };
-      if (activeTool.id === "text-to-video")    body = { prompt: fullPrompt };
-      if (activeTool.id === "image-to-video")   body = { prompt: fullPrompt, image_url: inputImageUrl };
-      if (activeTool.id === "text-to-audio")    body = { prompt: fullPrompt };
-      if (activeTool.id === "upscale")          body = { image_url: inputImageUrl };
-      if (activeTool.id === "remove-bg")        { body = { image_url: inputImageUrl }; endpoint = "remove-background"; }
+      if (activeTool.id === "text-to-image") body = { prompt: fullPrompt };
+      if (activeTool.id === "image-to-image") body = { prompt: fullPrompt, image_url: inputImageUrl };
+      if (activeTool.id === "text-to-video") body = { prompt: fullPrompt };
+      if (activeTool.id === "image-to-video") body = { prompt: fullPrompt, image_url: inputImageUrl };
+      if (activeTool.id === "text-to-audio") body = { prompt: fullPrompt };
+      if (activeTool.id === "upscale") body = { image_url: inputImageUrl };
+      if (activeTool.id === "remove-bg") { body = { image_url: inputImageUrl }; endpoint = "remove-background"; }
 
       const res = await fetch(`${BACKEND}/${endpoint}`, {
         method: "POST",
@@ -659,8 +946,8 @@ export default function App() {
           {/* Mobile topbar */}
           <div className="mobile-topbar">
             <button className="hamburger" onClick={() => setSidebarOpen(true)}>☰</button>
-            <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:18, letterSpacing:3, color:"var(--accent)" }}>RP VISION AI</span>
-            <span style={{ fontSize:11, color:"var(--muted2)" }}>{creditsLeft}cr left</span>
+            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 3, color: "var(--accent)" }}>RP VISION AI</span>
+            <span style={{ fontSize: 11, color: "var(--muted2)" }}>{creditsLeft}cr left</span>
           </div>
 
           {/* Desktop topbar */}
@@ -696,8 +983,8 @@ export default function App() {
                         onChange={e => setPrompt(e.target.value.slice(0, 500))}
                         placeholder={
                           activeTool.id === "text-to-audio" ? "Describe the music or sound you want..." :
-                          activeTool.id === "image-to-video" ? "Describe how to animate this image..." :
-                          "Describe what you want to create..."
+                            activeTool.id === "image-to-video" ? "Describe how to animate this image..." :
+                              "Describe what you want to create..."
                         }
                         rows={4}
                       />
@@ -717,7 +1004,7 @@ export default function App() {
                       placeholder="Paste image URL here..."
                     />
                     {inputImageUrl && (
-                      <img src={inputImageUrl} alt="" className="uploaded-preview" onError={e => e.target.style.display="none"} />
+                      <img src={inputImageUrl} alt="" className="uploaded-preview" onError={e => e.target.style.display = "none"} />
                     )}
                   </div>
                 )}
@@ -746,7 +1033,7 @@ export default function App() {
                 </button>
 
                 {creditsLeft < activeTool.credits && !loading && (
-                  <div style={{ fontSize:11, color:"var(--red)", textAlign:"center" }}>
+                  <div style={{ fontSize: 11, color: "var(--red)", textAlign: "center" }}>
                     Not enough credits. Resets at midnight.
                   </div>
                 )}
@@ -787,8 +1074,8 @@ export default function App() {
                     {result.type === "audio" && (
                       <div className="audio-player">
                         <div className="audio-label">◎ GENERATED AUDIO</div>
-                        <audio controls src={result.url} style={{ width:"100%", marginTop:10 }} />
-                        <button className="overlay-btn" style={{ marginTop:10 }} onClick={() => download(result.url, "mp3")}>↓ Download Audio</button>
+                        <audio controls src={result.url} style={{ width: "100%", marginTop: 10 }} />
+                        <button className="overlay-btn" style={{ marginTop: 10 }} onClick={() => download(result.url, "mp3")}>↓ Download Audio</button>
                       </div>
                     )}
                     {prompt && <div className="result-caption">"{prompt}"</div>}
@@ -801,25 +1088,25 @@ export default function App() {
           {/* ── HISTORY VIEW ── */}
           {view === "history" && (
             <div className="history-view">
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3, color:"var(--text)" }}>Generation History</div>
-                <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Your last 20 generations</div>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: 3, color: "var(--text)" }}>Generation History</div>
+                <div style={{ fontSize: 12, color: "var(--muted2)", marginTop: 3 }}>Your last 20 generations</div>
               </div>
               {historyLoading ? (
-                <div style={{ display:"flex", justifyContent:"center", padding:60 }}><Spinner /></div>
+                <div style={{ display: "flex", justifyContent: "center", padding: 60 }}><Spinner /></div>
               ) : history.length === 0 ? (
                 <div className="history-empty">
-                  <div style={{ fontSize:44, opacity:.3 }}>◫</div>
-                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:3, color:"var(--muted2)" }}>NO HISTORY YET</div>
-                  <div style={{ fontSize:12, color:"var(--muted)" }}>Generate something to see it here</div>
+                  <div style={{ fontSize: 44, opacity: .3 }}>◫</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, letterSpacing: 3, color: "var(--muted2)" }}>NO HISTORY YET</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>Generate something to see it here</div>
                 </div>
               ) : (
                 <div className="history-grid">
                   {history.map(h => (
-                    <div key={h.id} className="history-card" onClick={() => { setResult({ type:"image", url:h.outputUrl }); setActiveTool(TOOLS.find(t=>t.id===h.toolId)||TOOLS[0]); setView("create"); }}>
-                      <img className="history-img" src={h.outputUrl} alt="" onError={e => e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"} />
+                    <div key={h.id} className="history-card" onClick={() => { setResult({ type: "image", url: h.outputUrl }); setActiveTool(TOOLS.find(t => t.id === h.toolId) || TOOLS[0]); setView("create"); }}>
+                      <img className="history-img" src={h.outputUrl} alt="" onError={e => e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"} />
                       <div className="history-info">
-                        <div className="history-tool">{h.toolId?.replace(/-/g," ")}</div>
+                        <div className="history-tool">{h.toolId?.replace(/-/g, " ")}</div>
                         <div className="history-prompt">{h.prompt || "No prompt"}</div>
                       </div>
                     </div>
@@ -832,9 +1119,9 @@ export default function App() {
           {/* ── PROFILE VIEW ── */}
           {view === "profile" && (
             <div className="profile-view">
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3, color:"var(--text)" }}>My Profile</div>
-                <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Manage your account</div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: 3, color: "var(--text)" }}>My Profile</div>
+                <div style={{ fontSize: 12, color: "var(--muted2)", marginTop: 3 }}>Manage your account</div>
               </div>
               <div className="profile-card">
                 <div className="profile-header">
@@ -866,7 +1153,7 @@ export default function App() {
                 <button className="upgrade-btn" onClick={() => showToast("Payment coming soon! 🚀", "info")}>
                   ⬡ UPGRADE TO PRO — COMING SOON
                 </button>
-                <button style={{ background:"none", border:"1px solid rgba(231,76,60,.3)", borderRadius:10, color:"var(--red)", padding:"10px", cursor:"pointer", fontSize:13, fontWeight:500 }} onClick={handleLogout}>
+                <button style={{ background: "none", border: "1px solid rgba(231,76,60,.3)", borderRadius: 10, color: "var(--red)", padding: "10px", cursor: "pointer", fontSize: 13, fontWeight: 500 }} onClick={handleLogout}>
                   Sign Out
                 </button>
               </div>
