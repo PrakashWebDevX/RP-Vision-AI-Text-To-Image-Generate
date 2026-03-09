@@ -93,267 +93,33 @@ function Toast({ msg, type }) {
 // ── LOGIN SCREEN ───────────────────────────────────────────
 function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
-
-const handleLogin = async () => {
-  setLoading(true);
-  try { await onLogin(); } finally { setLoading(false); }
-};
-
+  const handleLogin = async () => {
+    setLoading(true);
+    try { await onLogin(); } finally { setLoading(false); }
+  };
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@300;400;500;600&display=swap');
-
-        :root {
-          --cyan: #00d4ff;
-          --purple: #8b5cf6;
-          --pink: #ff2d78;
-          --dark: #000000;
-          --card-bg: rgba(5,5,20,0.85);
-        }
-
-        .ls-page { display:flex; height:100vh; font-family:'Rajdhani',sans-serif; background:#000; color:#fff; overflow:hidden; position:relative; }
-
-        /* BG */
-        .ls-bg { position:fixed; inset:0; z-index:0;
-          background:radial-gradient(ellipse at 20% 50%,rgba(0,212,255,.06) 0%,transparent 55%),
-                     radial-gradient(ellipse at 80% 50%,rgba(255,45,120,.06) 0%,transparent 55%),
-                     radial-gradient(ellipse at 50% 50%,rgba(139,92,246,.05) 0%,transparent 60%),#000; }
-        .ls-grid { position:fixed; inset:0; z-index:0;
-          background-image:linear-gradient(rgba(0,212,255,.04) 1px,transparent 1px),
-                           linear-gradient(90deg,rgba(0,212,255,.04) 1px,transparent 1px);
-          background-size:60px 60px; }
-
-        /* Orbs */
-        .ls-orb { position:fixed; border-radius:50%; filter:blur(80px); opacity:0; animation:lsDrift 12s ease-in-out infinite; pointer-events:none; }
-        .ls-orb-1 { width:500px;height:500px;left:-150px;top:-150px;background:radial-gradient(circle,rgba(0,212,255,.25),transparent 70%);animation-delay:0s; }
-        .ls-orb-2 { width:400px;height:400px;right:-100px;bottom:-100px;background:radial-gradient(circle,rgba(255,45,120,.25),transparent 70%);animation-delay:-4s; }
-        .ls-orb-3 { width:350px;height:350px;left:40%;top:20%;background:radial-gradient(circle,rgba(139,92,246,.2),transparent 70%);animation-delay:-8s; }
-        @keyframes lsDrift {
-          0%   { opacity:0; transform:scale(.8) translate(0,0); }
-          20%  { opacity:1; }
-          50%  { transform:scale(1.1) translate(30px,-20px); }
-          80%  { opacity:1; }
-          100% { opacity:0; transform:scale(.8) translate(0,0); }
-        }
-
-        /* Layout */
-        .ls-inner { position:relative; z-index:1; display:flex; width:100%; height:100%; }
-
-        /* LEFT */
-        .ls-left { flex:1.1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:60px; position:relative; }
-        .ls-left::after { content:''; position:absolute; right:0; top:10%; bottom:10%; width:1px;
-          background:linear-gradient(to bottom,transparent,rgba(0,212,255,.4) 30%,rgba(139,92,246,.6) 50%,rgba(255,45,120,.4) 70%,transparent); }
-
-        .ls-logo-wrap { position:relative; animation:lsFloat 6s ease-in-out infinite; }
-        @keyframes lsFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
-        .ls-logo-glow { position:absolute; inset:-40px;
-          background:radial-gradient(ellipse,rgba(139,92,246,.3) 0%,rgba(0,212,255,.15) 40%,transparent 70%);
-          animation:lsPulseGlow 3s ease-in-out infinite; border-radius:50%; }
-        @keyframes lsPulseGlow { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
-        .ls-logo-icon { font-size:120px; line-height:1; position:relative; z-index:1;
-          filter:drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3));
-          animation:lsIconSpin 20s linear infinite; }
-        @keyframes lsIconSpin { 0%{filter:drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3))} 33%{filter:drop-shadow(0 0 30px rgba(139,92,246,.5)) drop-shadow(0 0 60px rgba(255,45,120,.3))} 66%{filter:drop-shadow(0 0 30px rgba(255,45,120,.5)) drop-shadow(0 0 60px rgba(0,212,255,.3))} 100%{filter:drop-shadow(0 0 30px rgba(0,212,255,.5)) drop-shadow(0 0 60px rgba(139,92,246,.3))} }
-
-        .ls-brand { margin-top:28px; font-family:'Orbitron',monospace; font-size:2rem; font-weight:900; letter-spacing:.15em; text-align:center;
-          background:linear-gradient(135deg,var(--cyan) 0%,var(--purple) 50%,var(--pink) 100%);
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; text-transform:uppercase; }
-        .ls-tagline { margin-top:10px; font-size:.85rem; letter-spacing:.4em; text-transform:uppercase; color:rgba(255,255,255,.35); text-align:center; }
-
-        .ls-stats { display:flex; gap:32px; margin-top:50px; }
-        .ls-stat { text-align:center; position:relative; }
-        .ls-stat::after { content:''; position:absolute; right:-16px; top:20%; bottom:20%; width:1px; background:rgba(255,255,255,.1); }
-        .ls-stat:last-child::after { display:none; }
-        .ls-stat-num { font-family:'Orbitron',monospace; font-size:1.6rem; font-weight:800;
-          background:linear-gradient(135deg,var(--cyan),var(--purple));
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .ls-stat-label { font-size:.7rem; letter-spacing:.15em; text-transform:uppercase; color:rgba(255,255,255,.4); margin-top:4px; }
-
-        .ls-features { display:flex; flex-direction:column; gap:14px; margin-top:48px; align-self:flex-start; width:100%; max-width:340px; }
-        .ls-feature { display:flex; align-items:center; gap:14px; padding:12px 18px; border:1px solid rgba(0,212,255,.12); border-radius:10px; background:rgba(0,212,255,.03); transition:all .3s; cursor:default; }
-        .ls-feature:hover { border-color:rgba(0,212,255,.35); background:rgba(0,212,255,.07); transform:translateX(5px); }
-        .ls-feat-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
-        .ls-feat-icon.c { background:rgba(0,212,255,.15); }
-        .ls-feat-icon.p { background:rgba(139,92,246,.15); }
-        .ls-feat-icon.q { background:rgba(255,45,120,.15); }
-        .ls-feat-text { font-size:.88rem; color:rgba(255,255,255,.65); }
-        .ls-feat-text strong { color:#fff; font-weight:600; display:block; font-size:.92rem; }
-
-        /* RIGHT */
-        .ls-right { flex:.9; display:flex; align-items:center; justify-content:center; padding:40px; }
-
-        .ls-card { width:100%; max-width:420px; background:var(--card-bg); border:1px solid rgba(139,92,246,.25);
-          border-radius:20px; padding:48px 44px; position:relative; backdrop-filter:blur(20px);
-          box-shadow:0 0 0 1px rgba(0,212,255,.05),0 30px 80px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
-          animation:lsCardIn .8s cubic-bezier(.16,1,.3,1) both; }
-        @keyframes lsCardIn { from{opacity:0;transform:translateY(30px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
-        .ls-card::before,.ls-card::after { content:''; position:absolute; width:20px; height:20px; border-color:var(--cyan); border-style:solid; opacity:.5; }
-        .ls-card::before { top:-1px;left:-1px;border-width:2px 0 0 2px;border-radius:20px 0 0 0; }
-        .ls-card::after  { bottom:-1px;right:-1px;border-width:0 2px 2px 0;border-radius:0 0 20px 0; }
-
-        .ls-scanline { position:absolute; left:0; right:0; height:2px;
-          background:linear-gradient(90deg,transparent,rgba(0,212,255,.4),rgba(139,92,246,.4),transparent);
-          top:0; border-radius:20px 20px 0 0; animation:lsScan 4s ease-in-out infinite; }
-        @keyframes lsScan { 0%{top:0%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{top:100%;opacity:0} }
-
-        .ls-card-title { font-family:'Orbitron',monospace; font-size:1.4rem; font-weight:700; letter-spacing:.08em; margin-bottom:6px;
-          background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,.75) 100%);
-          -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .ls-card-sub { font-size:.88rem; color:rgba(255,255,255,.4); letter-spacing:.05em; margin-bottom:38px; }
-
-        /* Google btn */
-        .ls-btn-google { width:100%; display:flex; align-items:center; justify-content:center; gap:14px;
-          padding:15px 24px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.15);
-          border-radius:12px; color:#fff; font-family:'Rajdhani',sans-serif; font-size:1rem; font-weight:600;
-          letter-spacing:.08em; cursor:pointer; position:relative; overflow:hidden; transition:all .3s ease; }
-        .ls-btn-google:hover:not(:disabled) { background:rgba(255,255,255,.08); border-color:rgba(0,212,255,.45);
-          box-shadow:0 0 24px rgba(0,212,255,.15),0 0 60px rgba(139,92,246,.08); transform:translateY(-2px); }
-        .ls-btn-google:active { transform:translateY(0); }
-        .ls-btn-google::before { content:''; position:absolute; inset:0;
-          background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(139,92,246,.07),rgba(255,45,120,.07));
-          opacity:0; transition:opacity .3s; }
-        .ls-btn-google:hover::before { opacity:1; }
-        .ls-btn-google:disabled { opacity:.6; cursor:not-allowed; }
-        .ls-btn-google .ls-arrow { position:absolute; right:18px; opacity:0; transform:translateX(-6px); transition:all .3s; font-size:1.1rem; }
-        .ls-btn-google:hover .ls-arrow { opacity:1; transform:translateX(0); color:var(--cyan); }
-
-        /* Spinner in btn */
-        .ls-spinner { width:20px; height:20px; border:2px solid rgba(0,212,255,.2); border-top-color:var(--cyan);
-          border-radius:50%; animation:lsSpin .8s linear infinite; }
-        @keyframes lsSpin { to{transform:rotate(360deg)} }
-
-        .ls-divider { display:flex; align-items:center; gap:14px; margin:30px 0;
-          color:rgba(255,255,255,.2); font-size:.75rem; letter-spacing:.15em; }
-        .ls-divider::before,.ls-divider::after { content:''; flex:1; height:1px; background:linear-gradient(to right,transparent,rgba(255,255,255,.1),transparent); }
-
-        .ls-trust { display:flex; justify-content:space-between; margin-top:28px; gap:8px; }
-        .ls-trust-item { display:flex; align-items:center; gap:6px; font-size:.72rem; color:rgba(255,255,255,.3); letter-spacing:.05em; }
-        .ls-trust-dot { width:5px; height:5px; border-radius:50%; background:var(--cyan); box-shadow:0 0 6px var(--cyan); flex-shrink:0; }
-        .ls-trust-dot.p { background:var(--purple); box-shadow:0 0 6px var(--purple); }
-        .ls-trust-dot.q { background:var(--pink); box-shadow:0 0 6px var(--pink); }
-
-        .ls-terms { margin-top:24px; font-size:.72rem; color:rgba(255,255,255,.2); text-align:center; line-height:1.7; }
-        .ls-terms a { color:rgba(0,212,255,.6); text-decoration:none; transition:color .2s; }
-        .ls-terms a:hover { color:var(--cyan); }
-
-        @media (max-width:768px) {
-          .ls-inner { flex-direction:column; overflow-y:auto; height:auto; min-height:100vh; }
-          .ls-left { padding:50px 30px 30px; }
-          .ls-left::after { display:none; }
-          .ls-logo-icon { font-size:80px; }
-          .ls-brand { font-size:1.4rem; }
-          .ls-stats { gap:20px; }
-          .ls-features { max-width:100%; }
-          .ls-right { padding:24px; padding-bottom:50px; }
-          .ls-card { padding:36px 28px; }
-        }
-      `}</style>
-
-      <div className="ls-page">
-        <div className="ls-bg" />
-        <div className="ls-grid" />
-        <div className="ls-orb ls-orb-1" />
-        <div className="ls-orb ls-orb-2" />
-        <div className="ls-orb ls-orb-3" />
-
-        <div className="ls-inner">
-          {/* LEFT BRAND PANEL */}
-          <div className="ls-left">
-            <div className="ls-logo-wrap">
-              <div className="ls-logo-glow" />
-              <div className="ls-logo-icon">⬡</div>
-            </div>
-
-            <div className="ls-brand">RP Vision AI</div>
-            <div className="ls-tagline">Create Without Limits</div>
-
-            <div className="ls-stats">
-              <div className="ls-stat">
-                <div className="ls-stat-num">7</div>
-                <div className="ls-stat-label">AI Models</div>
-              </div>
-              <div className="ls-stat">
-                <div className="ls-stat-num">10</div>
-                <div className="ls-stat-label">Free Credits</div>
-              </div>
-              <div className="ls-stat">
-                <div className="ls-stat-num">4K</div>
-                <div className="ls-stat-label">Output</div>
-              </div>
-            </div>
-
-            <div className="ls-features">
-              <div className="ls-feature">
-                <div className="ls-feat-icon c">⚡</div>
-                <div className="ls-feat-text">
-                  <strong>Instant Generation</strong>
-                  Text to image in seconds
-                </div>
-              </div>
-              <div className="ls-feature">
-                <div className="ls-feat-icon p">🎨</div>
-                <div className="ls-feat-text">
-                  <strong>Multiple Art Styles</strong>
-                  Realistic, anime, abstract & more
-                </div>
-              </div>
-              <div className="ls-feature">
-                <div className="ls-feat-icon q">🔓</div>
-                <div className="ls-feat-text">
-                  <strong>Free Forever Plan</strong>
-                  10 credits daily, no credit card
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT LOGIN CARD */}
-          <div className="ls-right">
-            <div className="ls-card">
-              <div className="ls-scanline" />
-
-              <div className="ls-card-title">Welcome Back</div>
-              <div className="ls-card-sub">Sign in to start creating with AI</div>
-
-              <button className="ls-btn-google" onClick={handleLogin} disabled={loading}>
-                {loading ? (
-                  <div className="ls-spinner" />
-                ) : (
-                  <>
-                    <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                    <span>Continue with Google</span>
-                    <span className="ls-arrow">→</span>
-                  </>
-                )}
-              </button>
-
-              <div className="ls-divider">OR</div>
-
-              <div style={{ textAlign:"center", color:"rgba(255,255,255,0.3)", fontSize:"0.85rem", letterSpacing:"0.05em" }}>
-                More sign-in options coming soon
-              </div>
-
-              <div className="ls-trust">
-                <div className="ls-trust-item"><div className="ls-trust-dot" /> Secure OAuth</div>
-                <div className="ls-trust-item"><div className="ls-trust-dot p" /> Instant Access</div>
-                <div className="ls-trust-item"><div className="ls-trust-dot q" /> Free Forever</div>
-              </div>
-
-              <div className="ls-terms">
-                By continuing, you agree to our{" "}
-                <a href="#">Terms of Service</a> &amp; <a href="#">Privacy Policy</a>
-              </div>
-            </div>
-          </div>
+    <div className="login-screen">
+      <div className="login-bg" />
+      <div className="login-card">
+        <div className="login-logo">
+          <span className="login-logo-icon">⬡</span>
+          <span className="login-logo-text">RP VISION AI</span>
         </div>
+        <div className="login-tagline">Transform your imagination into reality</div>
+        <div className="login-features">
+          {["7 AI Models", "10 Free Credits/Day", "History Dashboard", "HD Quality"].map(f => (
+            <div key={f} className="login-feature"><span className="lf-dot">◆</span>{f}</div>
+          ))}
+        </div>
+        <button className="login-btn" onClick={handleLogin} disabled={loading}>
+          {loading ? <Spinner /> : <>
+            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Continue with Google
+          </>}
+        </button>
+        <div className="login-footer">Free forever · No credit card needed</div>
       </div>
-    </>
+    </div>
   );
 }
 
