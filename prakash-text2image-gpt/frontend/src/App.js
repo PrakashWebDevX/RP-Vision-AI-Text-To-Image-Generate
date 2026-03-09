@@ -94,11 +94,10 @@ function Toast({ msg, type }) {
 function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
-    e.currentTarget.classList.add('loading');
-    setLoading(true);
-    try { await onLogin(); } finally { setLoading(false); }
-  };
+const handleLogin = async () => {
+  setLoading(true);
+  try { await onLogin(); } finally { setLoading(false); }
+};
 
   return (
     <>
