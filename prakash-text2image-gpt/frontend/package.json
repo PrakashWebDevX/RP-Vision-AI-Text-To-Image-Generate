@@ -39,13 +39,4 @@
     ]
   }
 }
-```
 
----
-
-### What changed:
-```
-@testing-library/react → ^13.4.0  ← fixed (was ^16 which needs React 19)
-react                  → ^18.2.0  ← same
-react-dom              → ^18.2.0  ← same
-firebase               → ^10.12.0 ← same
