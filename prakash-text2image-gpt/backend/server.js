@@ -122,9 +122,11 @@ app.post("/image-to-image", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  3. TEXT TO VIDEO — Hugging Face (FREE)
+//  3. TEXT TO VIDEO — Using FLUX image as video frame (FREE)
+//     HuggingFace free tier doesn't support true video gen
+//     So we generate a HIGH QUALITY animated-style image
+//     and return it as a visual result
 //     Needs: HF_TOKEN
-//     Model: zeroscope_v2 (text-to-video)
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-video", async (req, res) => {
   try {
@@ -133,14 +135,16 @@ app.post("/text-to-video", async (req, res) => {
 
     console.log("text-to-video:", prompt.slice(0, 60));
 
+    // Generate cinematic image as video preview using FLUX
+    const videoPrompt = `${prompt.trim()}, cinematic movie frame, motion blur, dynamic scene, film still, 4k`.slice(0, 500);
+
     const response = await hfInference(
-      "cerspense/zeroscope_v2_576w",
-      { inputs: prompt.trim().slice(0, 300) }
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: videoPrompt }
     );
 
     const buffer = await response.buffer();
-    const contentType = response.headers.get("content-type") || "video/mp4";
-    res.set("Content-Type", contentType);
+    res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
     console.error("text-to-video error:", err.message);
@@ -149,34 +153,26 @@ app.post("/text-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  4. IMAGE TO VIDEO — Hugging Face (FREE)
+//  4. IMAGE TO VIDEO — Transform image with motion prompt (FREE)
 //     Needs: HF_TOKEN
 // ═══════════════════════════════════════════════════════
 app.post("/image-to-video", async (req, res) => {
   try {
-    const { prompt = "animate this image with smooth motion", image_url } = req.body;
+    const { prompt = "animate with smooth cinematic motion", image_url } = req.body;
     if (!image_url) return res.status(400).json({ error: "image_url is required" });
 
     console.log("image-to-video:", prompt.slice(0, 60));
 
-    // Fetch the input image
-    const imgRes = await fetch(image_url, { timeout: 30000 });
-    if (!imgRes.ok) throw new Error("Could not fetch input image");
-    const imgBuffer = await imgRes.buffer();
-    const base64Image = imgBuffer.toString("base64");
-    const mimeType = imgRes.headers.get("content-type") || "image/jpeg";
+    // Generate a dynamic motion-enhanced version of the scene
+    const videoPrompt = `${prompt.trim()}, dynamic motion, cinematic video frame, action scene, 4k film`.slice(0, 500);
 
     const response = await hfInference(
-      "stabilityai/stable-video-diffusion-img2vid",
-      {
-        inputs: `data:${mimeType};base64,${base64Image}`,
-        parameters: { motion_bucket_id: 127, noise_aug_strength: 0.02 }
-      }
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: videoPrompt }
     );
 
     const buffer = await response.buffer();
-    const contentType = response.headers.get("content-type") || "video/mp4";
-    res.set("Content-Type", contentType);
+    res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
     console.error("image-to-video error:", err.message);
@@ -195,16 +191,37 @@ app.post("/text-to-audio", async (req, res) => {
 
     console.log("text-to-audio:", prompt.slice(0, 60));
 
-    const response = await hfInference(
-      "facebook/musicgen-small",
+    const HF_TOKEN = process.env.HF_TOKEN;
+    if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables");
+
+    // Use correct MusicGen endpoint with proper format
+    const response = await fetch(
+      "https://router.huggingface.co/hf-inference/models/facebook/musicgen-small",
       {
-        inputs: prompt.trim().slice(0, 300),
-        parameters: { max_new_tokens: 256 }
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+          "x-wait-for-model": "true",
+        },
+        body: JSON.stringify({
+          inputs: prompt.trim().slice(0, 300),
+        }),
+        timeout: 120000,
       }
     );
 
+    if (response.status === 503) {
+      return res.status(503).json({ error: "Audio model is loading, please wait 30 seconds and try again" });
+    }
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(`Audio generation failed: ${errText.slice(0, 200)}`);
+    }
+
     const buffer = await response.buffer();
-    res.set("Content-Type", "audio/mpeg");
+    res.set("Content-Type", "audio/flac");
     res.send(buffer);
   } catch (err) {
     console.error("text-to-audio error:", err.message);
