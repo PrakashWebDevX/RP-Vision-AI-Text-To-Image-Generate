@@ -181,8 +181,8 @@ app.post("/image-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — Microsoft SpeechT5 (FREE)
-//     Exact URL + payload from HuggingFace official docs
+//  5. TEXT TO AUDIO — Direct HuggingFace API (FREE)
+//     Uses speecht5_tts with correct direct API URL
 //     Needs: HF_TOKEN
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
@@ -193,45 +193,82 @@ app.post("/text-to-audio", async (req, res) => {
     const HF_TOKEN = process.env.HF_TOKEN;
     if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
 
-    // TTS works best with short text under 100 chars
     const cleanPrompt = prompt.trim().slice(0, 100);
     console.log("text-to-audio:", cleanPrompt);
 
-    // ── Exact URL from HuggingFace official docs ──
-    const response = await fetch(
-      "https://router.huggingface.co/hf-inference/models/microsoft/speecht5_tts",
+    // ── Direct HuggingFace Inference API (old stable URL) ──
+    // The router.huggingface.co does NOT support TTS
+    // Use api-inference.huggingface.co directly
+    const MODELS = [
       {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputs: cleanPrompt,
-        }),
-        timeout: 120000,
+        url: "https://api-inference.huggingface.co/models/microsoft/speecht5_tts",
+        body: { inputs: cleanPrompt },
+        type: "audio/flac"
+      },
+      {
+        url: "https://api-inference.huggingface.co/models/facebook/mms-tts-eng",
+        body: { inputs: cleanPrompt },
+        type: "audio/wav"
+      },
+      {
+        url: "https://api-inference.huggingface.co/models/kakao-enterprise/vits-ljs",
+        body: { inputs: cleanPrompt },
+        type: "audio/flac"
+      },
+    ];
+
+    for (const model of MODELS) {
+      try {
+        console.log("Trying:", model.url);
+        const r = await fetch(model.url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(model.body),
+          timeout: 60000,
+        });
+
+        console.log("Status:", r.status);
+
+        if (r.status === 503) {
+          // Model loading - wait and retry once
+          console.log("Model loading, waiting 20s...");
+          await new Promise(resolve => setTimeout(resolve, 20000));
+          const r2 = await fetch(model.url, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${HF_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(model.body),
+            timeout: 60000,
+          });
+          if (r2.ok) {
+            const buffer = await r2.buffer();
+            console.log("Audio success after retry! Bytes:", buffer.length);
+            res.set("Content-Type", model.type);
+            return res.send(buffer);
+          }
+        }
+
+        if (r.ok) {
+          const buffer = await r.buffer();
+          console.log("Audio success! Bytes:", buffer.length);
+          res.set("Content-Type", model.type);
+          return res.send(buffer);
+        }
+
+        const errBody = await r.text().catch(() => "");
+        console.log("Failed:", r.status, errBody.slice(0, 100));
+
+      } catch (e) {
+        console.log("Model error:", e.message);
       }
-    );
-
-    console.log("SpeechT5 status:", response.status);
-
-    if (response.status === 503) {
-      const j = await response.json().catch(() => ({}));
-      const wait = Math.round(j.estimated_time || 20);
-      return res.status(503).json({ error: `Model is loading. Please wait ${wait} seconds and try again.` });
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.log("SpeechT5 error body:", errText.slice(0, 300));
-      throw new Error(`TTS failed (${response.status}): ${errText.slice(0, 150)}`);
-    }
-
-    const buffer = await response.buffer();
-    console.log("Audio generated! Size:", buffer.length, "bytes");
-    res.set("Content-Type", "audio/flac");
-    res.send(buffer);
-
+    throw new Error("Audio generation failed. All models unavailable. Please try again later.");
   } catch (err) {
     console.error("text-to-audio error:", err.message);
     res.status(500).json({ error: err.message });
