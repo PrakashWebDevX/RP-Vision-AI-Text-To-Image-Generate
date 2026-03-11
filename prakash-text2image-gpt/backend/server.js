@@ -22,7 +22,7 @@ async function hfInference(model, payload, retries = 3) {
   const HF_TOKEN = process.env.HF_TOKEN;
   if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables. Get free key at huggingface.co/settings/tokens");
 
-  const url = `https://api-inference.huggingface.co/models/${model}`;
+  const url = `https://router.huggingface.co/hf-inference/models/${model}`;
 
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, {
