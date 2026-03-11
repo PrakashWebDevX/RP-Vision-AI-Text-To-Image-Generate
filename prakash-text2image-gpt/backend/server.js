@@ -2,17 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
+const multer = require("multer");
 
 const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
+
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
 const PORT = process.env.PORT || 10000;
-
-// ── ENV KEYS (set in Render → Environment) ────────────────
-// HF_TOKEN      → https://huggingface.co/settings/tokens
-// STABILITY_KEY → https://platform.stability.ai/account/keys
-// REMOVE_BG_KEY → https://www.remove.bg/dashboard
 
 // ── HELPER: delay ────────────────────────────────────────
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -20,7 +18,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 // ── HELPER: HuggingFace inference with retry ─────────────
 async function hfInference(model, payload, retries = 3) {
   const HF_TOKEN = process.env.HF_TOKEN;
-  if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables. Get free key at huggingface.co/settings/tokens");
+  if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables.");
 
   const url = `https://router.huggingface.co/hf-inference/models/${model}`;
 
@@ -36,24 +34,23 @@ async function hfInference(model, payload, retries = 3) {
       timeout: 120000,
     });
 
-    // Model loading — wait and retry
     if (res.status === 503) {
       const json = await res.json().catch(() => ({}));
       const waitTime = (json.estimated_time || 20) * 1000;
-      console.log(`Model loading, waiting ${Math.round(waitTime/1000)}s...`);
+      console.log(`Model loading, waiting ${Math.round(waitTime / 1000)}s...`);
       await delay(Math.min(waitTime, 30000));
       continue;
     }
 
     if (res.status === 429) {
-      console.log(`Rate limited, waiting 10s... (attempt ${i+1})`);
+      console.log(`Rate limited, waiting 10s... (attempt ${i + 1})`);
       await delay(10000);
       continue;
     }
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      throw new Error(`HuggingFace error ${res.status}: ${errText.slice(0,200)}`);
+      throw new Error(`HuggingFace error ${res.status}: ${errText.slice(0, 200)}`);
     }
 
     return res;
@@ -67,8 +64,7 @@ app.get("/health", (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  1. TEXT TO IMAGE — Hugging Face FLUX (FREE)
-//     Needs: HF_TOKEN
+//  1. TEXT TO IMAGE
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-image", async (req, res) => {
   try {
@@ -92,24 +88,21 @@ app.post("/text-to-image", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  2. IMAGE TO IMAGE — Hugging Face (FREE)
-//     Needs: HF_TOKEN
+//  2. IMAGE TO IMAGE — accepts uploaded file
 // ═══════════════════════════════════════════════════════
-app.post("/image-to-image", async (req, res) => {
+app.post("/image-to-image", upload.single("image"), async (req, res) => {
   try {
-    const { prompt, image_url } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
     console.log("image-to-image:", prompt.slice(0, 60));
 
-    // Use img2img via FLUX with prompt guidance
-    const fullPrompt = image_url
-      ? `${prompt}, maintaining the composition and style of the reference image`
-      : prompt;
+    const fullPrompt = `${prompt}, maintaining the composition and style of the reference image`.slice(0, 500);
 
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
-      { inputs: fullPrompt.slice(0, 500) }
+      { inputs: fullPrompt }
     );
 
     const buffer = await response.buffer();
@@ -122,11 +115,7 @@ app.post("/image-to-image", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  3. TEXT TO VIDEO — Using FLUX image as video frame (FREE)
-//     HuggingFace free tier doesn't support true video gen
-//     So we generate a HIGH QUALITY animated-style image
-//     and return it as a visual result
-//     Needs: HF_TOKEN
+//  3. TEXT TO VIDEO
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-video", async (req, res) => {
   try {
@@ -135,7 +124,6 @@ app.post("/text-to-video", async (req, res) => {
 
     console.log("text-to-video:", prompt.slice(0, 60));
 
-    // Generate cinematic image as video preview using FLUX
     const videoPrompt = `${prompt.trim()}, cinematic movie frame, motion blur, dynamic scene, film still, 4k`.slice(0, 500);
 
     const response = await hfInference(
@@ -153,18 +141,16 @@ app.post("/text-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  4. IMAGE TO VIDEO — Transform image with motion prompt (FREE)
-//     Needs: HF_TOKEN
+//  4. IMAGE TO VIDEO — accepts uploaded file
 // ═══════════════════════════════════════════════════════
-app.post("/image-to-video", async (req, res) => {
+app.post("/image-to-video", upload.single("image"), async (req, res) => {
   try {
-    const { prompt = "animate with smooth cinematic motion", image_url } = req.body;
-    if (!image_url) return res.status(400).json({ error: "image_url is required" });
+    const prompt = (req.body.prompt || "animate with smooth cinematic motion").trim();
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
     console.log("image-to-video:", prompt.slice(0, 60));
 
-    // Generate a dynamic motion-enhanced version of the scene
-    const videoPrompt = `${prompt.trim()}, dynamic motion, cinematic video frame, action scene, 4k film`.slice(0, 500);
+    const videoPrompt = `${prompt}, dynamic motion, cinematic video frame, action scene, 4k film`.slice(0, 500);
 
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
@@ -181,9 +167,7 @@ app.post("/image-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — Direct HuggingFace API (FREE)
-//     Uses speecht5_tts with correct direct API URL
-//     Needs: HF_TOKEN
+//  5. TEXT TO AUDIO
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
@@ -191,29 +175,26 @@ app.post("/text-to-audio", async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
     const HF_TOKEN = process.env.HF_TOKEN;
-    if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
+    if (!HF_TOKEN) throw new Error("HF_TOKEN not set.");
 
     const cleanPrompt = prompt.trim().slice(0, 100);
     console.log("text-to-audio:", cleanPrompt);
 
-    // ── Direct HuggingFace Inference API (old stable URL) ──
-    // The router.huggingface.co does NOT support TTS
-    // Use api-inference.huggingface.co directly
     const MODELS = [
       {
-        url: "https://api-inference.huggingface.co/models/microsoft/speecht5_tts",
+        url: "https://router.huggingface.co/hf-inference/models/microsoft/speecht5_tts",
         body: { inputs: cleanPrompt },
-        type: "audio/flac"
+        type: "audio/flac",
       },
       {
-        url: "https://api-inference.huggingface.co/models/facebook/mms-tts-eng",
+        url: "https://router.huggingface.co/hf-inference/models/facebook/mms-tts-eng",
         body: { inputs: cleanPrompt },
-        type: "audio/wav"
+        type: "audio/wav",
       },
       {
-        url: "https://api-inference.huggingface.co/models/kakao-enterprise/vits-ljs",
+        url: "https://router.huggingface.co/hf-inference/models/kakao-enterprise/vits-ljs",
         body: { inputs: cleanPrompt },
-        type: "audio/flac"
+        type: "audio/flac",
       },
     ];
 
@@ -223,7 +204,7 @@ app.post("/text-to-audio", async (req, res) => {
         const r = await fetch(model.url, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${HF_TOKEN}`,
+            Authorization: `Bearer ${HF_TOKEN}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(model.body),
@@ -233,13 +214,12 @@ app.post("/text-to-audio", async (req, res) => {
         console.log("Status:", r.status);
 
         if (r.status === 503) {
-          // Model loading - wait and retry once
           console.log("Model loading, waiting 20s...");
-          await new Promise(resolve => setTimeout(resolve, 20000));
+          await delay(20000);
           const r2 = await fetch(model.url, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${HF_TOKEN}`,
+              Authorization: `Bearer ${HF_TOKEN}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(model.body),
@@ -262,7 +242,6 @@ app.post("/text-to-audio", async (req, res) => {
 
         const errBody = await r.text().catch(() => "");
         console.log("Failed:", r.status, errBody.slice(0, 100));
-
       } catch (e) {
         console.log("Model error:", e.message);
       }
@@ -276,33 +255,33 @@ app.post("/text-to-audio", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  6. IMAGE UPSCALER — Stability AI (25 free credits)
-//     Needs: STABILITY_KEY
-//     Get key: https://platform.stability.ai/account/keys
+//  6. IMAGE UPSCALER — accepts uploaded file
 // ═══════════════════════════════════════════════════════
-app.post("/upscale", async (req, res) => {
+app.post("/upscale", upload.single("image"), async (req, res) => {
   try {
-    const { image_url } = req.body;
-    if (!image_url) return res.status(400).json({ error: "image_url is required" });
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
     const STABILITY_KEY = process.env.STABILITY_KEY;
     if (!STABILITY_KEY) return res.status(500).json({ error: "STABILITY_KEY not set. Get free key at platform.stability.ai" });
 
-    console.log("upscale:", image_url.slice(0, 60));
+    console.log("upscale: received file", req.file.originalname);
 
-    const imgRes = await fetch(image_url, { timeout: 30000 });
-    if (!imgRes.ok) throw new Error("Could not fetch source image");
-    const imgBuffer = await imgRes.buffer();
-    const imgContentType = imgRes.headers.get("content-type") || "image/jpeg";
-    const ext = imgContentType.includes("png") ? "png" : "jpg";
+    const ext = req.file.mimetype.includes("png") ? "png" : "jpg";
 
     const form = new FormData();
-    form.append("image", imgBuffer, { filename: `image.${ext}`, contentType: imgContentType });
+    form.append("image", req.file.buffer, {
+      filename: `image.${ext}`,
+      contentType: req.file.mimetype,
+    });
     form.append("output_format", "jpeg");
 
     const upscaleRes = await fetch("https://api.stability.ai/v2beta/stable-image/upscale/fast", {
       method: "POST",
-      headers: { Authorization: `Bearer ${STABILITY_KEY}`, Accept: "image/*", ...form.getHeaders() },
+      headers: {
+        Authorization: `Bearer ${STABILITY_KEY}`,
+        Accept: "image/*",
+        ...form.getHeaders(),
+      },
       body: form,
       timeout: 60000,
     });
@@ -322,27 +301,32 @@ app.post("/upscale", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  7. REMOVE BACKGROUND — Remove.bg (50 free/month)
-//     Needs: REMOVE_BG_KEY
-//     Get key: https://www.remove.bg/dashboard
+//  7. REMOVE BACKGROUND — accepts uploaded file
 // ═══════════════════════════════════════════════════════
-app.post("/remove-background", async (req, res) => {
+app.post("/remove-background", upload.single("image"), async (req, res) => {
   try {
-    const { image_url } = req.body;
-    if (!image_url) return res.status(400).json({ error: "image_url is required" });
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
     const REMOVE_BG_KEY = process.env.REMOVE_BG_KEY;
     if (!REMOVE_BG_KEY) return res.status(500).json({ error: "REMOVE_BG_KEY not set. Get free key at remove.bg/dashboard" });
 
-    console.log("remove-bg:", image_url.slice(0, 60));
+    console.log("remove-bg: received file", req.file.originalname);
+
+    const ext = req.file.mimetype.includes("png") ? "png" : "jpg";
 
     const form = new FormData();
-    form.append("image_url", image_url);
+    form.append("image_file", req.file.buffer, {
+      filename: `image.${ext}`,
+      contentType: req.file.mimetype,
+    });
     form.append("size", "auto");
 
     const response = await fetch("https://api.remove.bg/v1.0/removebg", {
       method: "POST",
-      headers: { "X-Api-Key": REMOVE_BG_KEY, ...form.getHeaders() },
+      headers: {
+        "X-Api-Key": REMOVE_BG_KEY,
+        ...form.getHeaders(),
+      },
       body: form,
       timeout: 60000,
     });
