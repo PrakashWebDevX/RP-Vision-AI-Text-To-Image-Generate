@@ -181,9 +181,9 @@ app.post("/image-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — HuggingFace MMS TTS (FREE)
+//  5. TEXT TO AUDIO — HuggingFace SpeechT5 (FREE)
 //     Needs: HF_TOKEN
-//     Uses Microsoft SpeechT5 — reliable and fast
+//     Correct payload: { text_inputs: "..." }
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
@@ -195,9 +195,10 @@ app.post("/text-to-audio", async (req, res) => {
     const HF_TOKEN = process.env.HF_TOKEN;
     if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
 
-    const cleanPrompt = prompt.trim().slice(0, 300);
+    // Keep it short — TTS works best under 100 chars
+    const cleanPrompt = prompt.trim().slice(0, 100);
 
-    // ── Try 1: Microsoft SpeechT5 TTS ──
+    // ── Try 1: Microsoft SpeechT5 — correct payload is text_inputs ──
     try {
       console.log("Trying SpeechT5...");
       const r1 = await fetch(
@@ -209,22 +210,23 @@ app.post("/text-to-audio", async (req, res) => {
             "Content-Type": "application/json",
             "x-wait-for-model": "true",
           },
-          body: JSON.stringify({ inputs: cleanPrompt }),
+          body: JSON.stringify({ text_inputs: cleanPrompt }),
           timeout: 60000,
         }
       );
+      console.log("SpeechT5 status:", r1.status);
       if (r1.ok) {
-        console.log("SpeechT5 success!");
         const buffer = await r1.buffer();
         res.set("Content-Type", "audio/flac");
         return res.send(buffer);
       }
-      console.log("SpeechT5 failed:", r1.status);
+      const t1 = await r1.text().catch(() => "");
+      console.log("SpeechT5 body:", t1.slice(0, 150));
     } catch (e) { console.log("SpeechT5 error:", e.message); }
 
-    // ── Try 2: Facebook MMS TTS ──
+    // ── Try 2: Facebook MMS-TTS — correct payload is inputs ──
     try {
-      console.log("Trying Facebook MMS...");
+      console.log("Trying MMS-TTS...");
       const r2 = await fetch(
         "https://router.huggingface.co/hf-inference/models/facebook/mms-tts-eng",
         {
@@ -238,20 +240,21 @@ app.post("/text-to-audio", async (req, res) => {
           timeout: 60000,
         }
       );
+      console.log("MMS status:", r2.status);
       if (r2.ok) {
-        console.log("MMS TTS success!");
         const buffer = await r2.buffer();
         res.set("Content-Type", "audio/wav");
         return res.send(buffer);
       }
-      console.log("MMS TTS failed:", r2.status);
-    } catch (e) { console.log("MMS TTS error:", e.message); }
+      const t2 = await r2.text().catch(() => "");
+      console.log("MMS body:", t2.slice(0, 150));
+    } catch (e) { console.log("MMS error:", e.message); }
 
-    // ── Try 3: Bark TTS ──
+    // ── Try 3: ESPnet VITS ──
     try {
-      console.log("Trying Bark TTS...");
+      console.log("Trying ESPnet VITS...");
       const r3 = await fetch(
-        "https://router.huggingface.co/hf-inference/models/suno/bark-small",
+        "https://router.huggingface.co/hf-inference/models/espnet/english_male_ryanspeech_fastspeech2",
         {
           method: "POST",
           headers: {
@@ -260,20 +263,20 @@ app.post("/text-to-audio", async (req, res) => {
             "x-wait-for-model": "true",
           },
           body: JSON.stringify({ inputs: cleanPrompt }),
-          timeout: 90000,
+          timeout: 60000,
         }
       );
+      console.log("ESPnet status:", r3.status);
       if (r3.ok) {
-        console.log("Bark TTS success!");
         const buffer = await r3.buffer();
-        res.set("Content-Type", "audio/wav");
+        res.set("Content-Type", "audio/flac");
         return res.send(buffer);
       }
-      const errText = await r3.text().catch(() => "");
-      console.log("Bark TTS failed:", r3.status, errText.slice(0, 100));
-    } catch (e) { console.log("Bark error:", e.message); }
+      const t3 = await r3.text().catch(() => "");
+      console.log("ESPnet body:", t3.slice(0, 150));
+    } catch (e) { console.log("ESPnet error:", e.message); }
 
-    throw new Error("All audio models failed. Please try again in a few minutes.");
+    throw new Error("Audio models are loading. Please wait 1 minute and try again.");
   } catch (err) {
     console.error("text-to-audio error:", err.message);
     res.status(500).json({ error: err.message });
