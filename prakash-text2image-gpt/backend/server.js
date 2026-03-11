@@ -181,8 +181,9 @@ app.post("/image-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — Pollinations TTS (FREE, no key)
-//     Fallback: HuggingFace ESPnet if Pollinations fails
+//  5. TEXT TO AUDIO — HuggingFace MMS TTS (FREE)
+//     Needs: HF_TOKEN
+//     Uses Microsoft SpeechT5 — reliable and fast
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
@@ -191,56 +192,88 @@ app.post("/text-to-audio", async (req, res) => {
 
     console.log("text-to-audio:", prompt.slice(0, 60));
 
-    const cleanPrompt = prompt.trim().slice(0, 300);
-
-    // ── Try Pollinations audio first (FREE, no key needed) ──
-    try {
-      const pollinationsUrl = `https://audio.pollinations.ai/${encodeURIComponent(cleanPrompt)}?model=openai-audio&voice=alloy`;
-      console.log("Trying Pollinations audio...");
-
-      const polRes = await fetch(pollinationsUrl, { timeout: 60000 });
-
-      if (polRes.ok) {
-        const buffer = await polRes.buffer();
-        const ct = polRes.headers.get("content-type") || "audio/mpeg";
-        res.set("Content-Type", ct);
-        return res.send(buffer);
-      }
-      console.log("Pollinations audio failed, trying HuggingFace...");
-    } catch (polErr) {
-      console.log("Pollinations audio error:", polErr.message);
-    }
-
-    // ── Fallback: HuggingFace ESPnet TTS ──
     const HF_TOKEN = process.env.HF_TOKEN;
     if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
 
-    const hfRes = await fetch(
-      "https://router.huggingface.co/hf-inference/models/espnet/kan-bayashi_ljspeech_vits",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-          "x-wait-for-model": "true",
-        },
-        body: JSON.stringify({ inputs: cleanPrompt }),
-        timeout: 120000,
+    const cleanPrompt = prompt.trim().slice(0, 300);
+
+    // ── Try 1: Microsoft SpeechT5 TTS ──
+    try {
+      console.log("Trying SpeechT5...");
+      const r1 = await fetch(
+        "https://router.huggingface.co/hf-inference/models/microsoft/speecht5_tts",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+            "x-wait-for-model": "true",
+          },
+          body: JSON.stringify({ inputs: cleanPrompt }),
+          timeout: 60000,
+        }
+      );
+      if (r1.ok) {
+        console.log("SpeechT5 success!");
+        const buffer = await r1.buffer();
+        res.set("Content-Type", "audio/flac");
+        return res.send(buffer);
       }
-    );
+      console.log("SpeechT5 failed:", r1.status);
+    } catch (e) { console.log("SpeechT5 error:", e.message); }
 
-    if (hfRes.status === 503) {
-      return res.status(503).json({ error: "Audio model is loading, please wait 30 seconds and try again" });
-    }
+    // ── Try 2: Facebook MMS TTS ──
+    try {
+      console.log("Trying Facebook MMS...");
+      const r2 = await fetch(
+        "https://router.huggingface.co/hf-inference/models/facebook/mms-tts-eng",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+            "x-wait-for-model": "true",
+          },
+          body: JSON.stringify({ inputs: cleanPrompt }),
+          timeout: 60000,
+        }
+      );
+      if (r2.ok) {
+        console.log("MMS TTS success!");
+        const buffer = await r2.buffer();
+        res.set("Content-Type", "audio/wav");
+        return res.send(buffer);
+      }
+      console.log("MMS TTS failed:", r2.status);
+    } catch (e) { console.log("MMS TTS error:", e.message); }
 
-    if (!hfRes.ok) {
-      const errText = await hfRes.text().catch(() => "");
-      throw new Error(`Audio generation failed: ${errText.slice(0, 200)}`);
-    }
+    // ── Try 3: Bark TTS ──
+    try {
+      console.log("Trying Bark TTS...");
+      const r3 = await fetch(
+        "https://router.huggingface.co/hf-inference/models/suno/bark-small",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+            "x-wait-for-model": "true",
+          },
+          body: JSON.stringify({ inputs: cleanPrompt }),
+          timeout: 90000,
+        }
+      );
+      if (r3.ok) {
+        console.log("Bark TTS success!");
+        const buffer = await r3.buffer();
+        res.set("Content-Type", "audio/wav");
+        return res.send(buffer);
+      }
+      const errText = await r3.text().catch(() => "");
+      console.log("Bark TTS failed:", r3.status, errText.slice(0, 100));
+    } catch (e) { console.log("Bark error:", e.message); }
 
-    const buffer = await hfRes.buffer();
-    res.set("Content-Type", "audio/flac");
-    res.send(buffer);
+    throw new Error("All audio models failed. Please try again in a few minutes.");
   } catch (err) {
     console.error("text-to-audio error:", err.message);
     res.status(500).json({ error: err.message });
