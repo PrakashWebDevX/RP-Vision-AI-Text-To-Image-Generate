@@ -181,8 +181,8 @@ app.post("/image-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — Hugging Face MusicGen (FREE)
-//     Needs: HF_TOKEN
+//  5. TEXT TO AUDIO — Pollinations TTS (FREE, no key)
+//     Fallback: HuggingFace ESPnet if Pollinations fails
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
@@ -191,12 +191,32 @@ app.post("/text-to-audio", async (req, res) => {
 
     console.log("text-to-audio:", prompt.slice(0, 60));
 
-    const HF_TOKEN = process.env.HF_TOKEN;
-    if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables");
+    const cleanPrompt = prompt.trim().slice(0, 300);
 
-    // Use correct MusicGen endpoint with proper format
-    const response = await fetch(
-      "https://router.huggingface.co/hf-inference/models/facebook/musicgen-small",
+    // ── Try Pollinations audio first (FREE, no key needed) ──
+    try {
+      const pollinationsUrl = `https://audio.pollinations.ai/${encodeURIComponent(cleanPrompt)}?model=openai-audio&voice=alloy`;
+      console.log("Trying Pollinations audio...");
+
+      const polRes = await fetch(pollinationsUrl, { timeout: 60000 });
+
+      if (polRes.ok) {
+        const buffer = await polRes.buffer();
+        const ct = polRes.headers.get("content-type") || "audio/mpeg";
+        res.set("Content-Type", ct);
+        return res.send(buffer);
+      }
+      console.log("Pollinations audio failed, trying HuggingFace...");
+    } catch (polErr) {
+      console.log("Pollinations audio error:", polErr.message);
+    }
+
+    // ── Fallback: HuggingFace ESPnet TTS ──
+    const HF_TOKEN = process.env.HF_TOKEN;
+    if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
+
+    const hfRes = await fetch(
+      "https://router.huggingface.co/hf-inference/models/espnet/kan-bayashi_ljspeech_vits",
       {
         method: "POST",
         headers: {
@@ -204,23 +224,21 @@ app.post("/text-to-audio", async (req, res) => {
           "Content-Type": "application/json",
           "x-wait-for-model": "true",
         },
-        body: JSON.stringify({
-          inputs: prompt.trim().slice(0, 300),
-        }),
+        body: JSON.stringify({ inputs: cleanPrompt }),
         timeout: 120000,
       }
     );
 
-    if (response.status === 503) {
+    if (hfRes.status === 503) {
       return res.status(503).json({ error: "Audio model is loading, please wait 30 seconds and try again" });
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
+    if (!hfRes.ok) {
+      const errText = await hfRes.text().catch(() => "");
       throw new Error(`Audio generation failed: ${errText.slice(0, 200)}`);
     }
 
-    const buffer = await response.buffer();
+    const buffer = await hfRes.buffer();
     res.set("Content-Type", "audio/flac");
     res.send(buffer);
   } catch (err) {
