@@ -81,16 +81,6 @@ async function fetchHistory(uid) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-// Convert file to base64
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 // Convert file to object URL for preview
 function fileToPreviewUrl(file) {
   return URL.createObjectURL(file);
