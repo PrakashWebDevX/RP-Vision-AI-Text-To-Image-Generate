@@ -150,49 +150,20 @@ app.post("/image-to-video", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO
+//  5. TEXT TO AUDIO — Returns text for frontend TTS
+//     Uses Web Speech API in browser (FREE, no API key)
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-    const HF_TOKEN = process.env.HF_TOKEN;
-    if (!HF_TOKEN) throw new Error("HF_TOKEN not set");
-    const cleanPrompt = prompt.trim().slice(0, 100);
-    console.log("text-to-audio:", cleanPrompt);
-    const MODELS = [
-      { url: "https://api-inference.huggingface.co/models/microsoft/speecht5_tts", type: "audio/flac" },
-      { url: "https://api-inference.huggingface.co/models/facebook/mms-tts-eng", type: "audio/wav" },
-      { url: "https://api-inference.huggingface.co/models/kakao-enterprise/vits-ljs", type: "audio/flac" },
-    ];
-    for (const model of MODELS) {
-      try {
-        console.log("Trying:", model.url);
-        let r = await fetch(model.url, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${HF_TOKEN}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ inputs: cleanPrompt }),
-          timeout: 60000,
-        });
-        if (r.status === 503) {
-          await delay(20000);
-          r = await fetch(model.url, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${HF_TOKEN}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ inputs: cleanPrompt }),
-            timeout: 60000,
-          });
-        }
-        if (r.ok) {
-          const buffer = await r.buffer();
-          console.log("Audio success! Bytes:", buffer.length);
-          res.set("Content-Type", model.type);
-          return res.send(buffer);
-        }
-        console.log("Failed:", r.status, (await r.text().catch(() => "")).slice(0, 80));
-      } catch (e) { console.log("Error:", e.message); }
-    }
-    throw new Error("Audio models unavailable. Please try again in 1 minute.");
+    console.log("text-to-audio:", prompt.slice(0, 60));
+    // Return the text — frontend will use Web Speech API to speak it
+    res.json({ 
+      success: true, 
+      text: prompt.trim().slice(0, 300),
+      message: "Use Web Speech API in browser"
+    });
   } catch (err) {
     console.error("text-to-audio error:", err.message);
     res.status(500).json({ error: err.message });
