@@ -4,7 +4,7 @@ import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, setDoc, updateDoc, collection,
-  addDoc, query, where, orderBy, limit, getDocs, serverTimestamp
+  addDoc, query, where, orderBy, limit, getDocs, deleteDoc, serverTimestamp
 } from "firebase/firestore";
 
 const BACKEND = "https://rp-vision-backend.onrender.com";
@@ -57,6 +57,7 @@ const CLOUDINARY_PRESET = "RPVISIONAI";
 
 async function uploadToCloudinary(blob) {
   try {
+    console.log("⬆️ Uploading to Cloudinary...", CLOUDINARY_CLOUD, CLOUDINARY_PRESET);
     const fd = new FormData();
     fd.append("file", blob);
     fd.append("upload_preset", CLOUDINARY_PRESET);
@@ -66,22 +67,50 @@ async function uploadToCloudinary(blob) {
       body: fd,
     });
     const data = await res.json();
-    if (data.secure_url) return data.secure_url;
-    throw new Error("Cloudinary upload failed");
+    console.log("☁️ Cloudinary response:", data);
+    if (data.secure_url) {
+      console.log("✅ Cloudinary URL:", data.secure_url);
+      return data.secure_url;
+    }
+    console.error("❌ Cloudinary error:", data.error?.message || "Unknown");
+    return null;
   } catch (err) {
-    console.error("Cloudinary error:", err);
+    console.error("❌ Cloudinary exception:", err);
     return null;
   }
 }
 
 async function saveToHistory(uid, toolId, outputUrl, prompt) {
-  await addDoc(collection(db, "history"), { uid, toolId, outputUrl, prompt, createdAt: serverTimestamp() });
+  try {
+    console.log("💾 Saving to Firestore history...", { uid, toolId, outputUrl: outputUrl?.slice(0,60), prompt });
+    const ref = await addDoc(collection(db, "history"), { uid, toolId, outputUrl, prompt, createdAt: serverTimestamp() });
+    console.log("✅ History saved! Doc ID:", ref.id);
+  } catch (err) {
+    console.error("❌ Firestore saveToHistory error:", err);
+  }
 }
 
-async function fetchHistory(uid) {
-  const q = query(collection(db, "history"), where("uid","==",uid), orderBy("createdAt","desc"), limit(20));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+async function deleteHistoryItem(docId) {
+  try {
+    await deleteDoc(doc(db, "history", docId));
+    console.log("✅ Deleted:", docId);
+    return true;
+  } catch (err) {
+    console.error("❌ Delete error:", err);
+    return false;
+  }
+}
+  try {
+    console.log("📜 Fetching history for uid:", uid);
+    const q = query(collection(db, "history"), where("uid","==",uid), orderBy("createdAt","desc"), limit(20));
+    const snap = await getDocs(q);
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    console.log("✅ History fetched:", items.length, "items", items);
+    return items;
+  } catch (err) {
+    console.error("❌ fetchHistory error:", err);
+    return [];
+  }
 }
 
 function Spinner() { return <div className="spinner" />; }
@@ -938,9 +967,22 @@ export default function App() {
 
           {view==="history" && (
             <div className="history-view">
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3 }}>Generation History</div>
-                <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Your last 20 generations</div>
+              <div style={{ marginBottom:20, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3 }}>Generation History</div>
+                  <div style={{ fontSize:12, color:"var(--muted2)", marginTop:3 }}>Your last 20 generations</div>
+                </div>
+                {history.length > 0 && (
+                  <button style={{ background:"rgba(231,76,60,0.08)", border:"1px solid rgba(231,76,60,0.25)", borderRadius:8, color:"var(--red)", fontSize:12, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                    onClick={async () => {
+                      if (!window.confirm("Delete ALL history? This cannot be undone!")) return;
+                      await Promise.all(history.map(h => deleteHistoryItem(h.id)));
+                      setHistory([]);
+                      showToast("All history deleted!", "success");
+                    }}>
+                    ✕ Clear All
+                  </button>
+                )}
               </div>
               {historyLoading ? <div style={{ display:"flex", justifyContent:"center", padding:60 }}><Spinner /></div>
               : history.length===0 ? (
@@ -952,12 +994,24 @@ export default function App() {
               ) : (
                 <div className="history-grid">
                   {history.map(h => (
-                    <div key={h.id} className="history-card" onClick={() => { setResult({ type:"image", url:h.outputUrl }); setActiveTool(TOOLS.find(t=>t.id===h.toolId)||TOOLS[0]); setView("create"); }}>
-                      <img className="history-img" src={h.outputUrl} alt="" onError={e=>e.target.style.display="none"} />
-                      <div className="history-info">
-                        <div className="history-tool">{h.toolId?.replace(/-/g," ")}</div>
-                        <div className="history-prompt">{h.prompt||"No prompt"}</div>
+                    <div key={h.id} className="history-card" style={{ position:"relative" }}>
+                      <div onClick={() => { setResult({ type:"image", url:h.outputUrl }); setActiveTool(TOOLS.find(t=>t.id===h.toolId)||TOOLS[0]); setView("create"); }}>
+                        <img className="history-img" src={h.outputUrl} alt="" onError={e=>e.target.style.display="none"} />
+                        <div className="history-info">
+                          <div className="history-tool">{h.toolId?.replace(/-/g," ")}</div>
+                          <div className="history-prompt">{h.prompt||"No prompt"}</div>
+                        </div>
                       </div>
+                      <button
+                        style={{ position:"absolute", top:8, right:8, width:26, height:26, borderRadius:"50%", background:"rgba(0,0,0,0.7)", border:"1px solid rgba(231,76,60,0.4)", color:"var(--red)", fontSize:12, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)", zIndex:2 }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const ok = await deleteHistoryItem(h.id);
+                          if (ok) {
+                            setHistory(prev => prev.filter(item => item.id !== h.id));
+                            showToast("Deleted!", "success");
+                          }
+                        }}>✕</button>
                     </div>
                   ))}
                 </div>
