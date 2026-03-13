@@ -5,20 +5,35 @@ const FormData = require("form-data");
 const multer = require("multer");
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
-
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "50mb" }));
+
+// multer — store uploaded file in memory
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const PORT = process.env.PORT || 10000;
 
-// ── HELPER: delay ────────────────────────────────────────
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ── HELPER: HuggingFace inference with retry ─────────────
+// ── HELPER: get image buffer from URL or base64 ──────────
+async function getImageBuffer(imageUrl, imageBase64) {
+  if (imageBase64) {
+    // base64 data URI from frontend file upload
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    return { buffer: Buffer.from(base64Data, "base64"), contentType: "image/jpeg" };
+  }
+  if (imageUrl) {
+    const res = await fetch(imageUrl, { timeout: 30000 });
+    if (!res.ok) throw new Error("Could not fetch image from URL");
+    return { buffer: await res.buffer(), contentType: res.headers.get("content-type") || "image/jpeg" };
+  }
+  throw new Error("No image provided");
+}
+
+// ── HELPER: HuggingFace inference ───────────────────────
 async function hfInference(model, payload, retries = 3) {
   const HF_TOKEN = process.env.HF_TOKEN;
-  if (!HF_TOKEN) throw new Error("HF_TOKEN not set in environment variables.");
+  if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
 
   const url = `https://router.huggingface.co/hf-inference/models/${model}`;
 
@@ -41,26 +56,30 @@ async function hfInference(model, payload, retries = 3) {
       await delay(Math.min(waitTime, 30000));
       continue;
     }
-
     if (res.status === 429) {
       console.log(`Rate limited, waiting 10s... (attempt ${i + 1})`);
       await delay(10000);
       continue;
     }
-
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`HuggingFace error ${res.status}: ${errText.slice(0, 200)}`);
     }
-
     return res;
   }
-  throw new Error("Max retries reached. Please try again in a moment.");
+  throw new Error("Max retries reached. Please try again.");
 }
 
 // ── HEALTH CHECK ─────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    keys: {
+      HF_TOKEN: !!process.env.HF_TOKEN,
+      STABILITY_KEY: !!process.env.STABILITY_KEY,
+      REMOVE_BG_KEY: !!process.env.REMOVE_BG_KEY,
+    }
+  });
 });
 
 // ═══════════════════════════════════════════════════════
@@ -70,14 +89,12 @@ app.post("/text-to-image", async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-
     console.log("text-to-image:", prompt.slice(0, 60));
 
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
       { inputs: prompt.trim().slice(0, 500) }
     );
-
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
@@ -88,23 +105,22 @@ app.post("/text-to-image", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  2. IMAGE TO IMAGE — accepts uploaded file
+//  2. IMAGE TO IMAGE
+//     Accepts: image_url (URL) OR image_base64 (file upload)
 // ═══════════════════════════════════════════════════════
-app.post("/image-to-image", upload.single("image"), async (req, res) => {
+app.post("/image-to-image", async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, image_url, image_base64 } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-    if (!req.file) return res.status(400).json({ error: "Image file is required" });
+    if (!image_url && !image_base64) return res.status(400).json({ error: "image_url or image_base64 is required" });
 
-    console.log("image-to-image:", prompt.slice(0, 60));
+    console.log("image-to-image:", prompt.slice(0, 60), image_base64 ? "[base64 upload]" : "[url]");
 
-    const fullPrompt = `${prompt}, maintaining the composition and style of the reference image`.slice(0, 500);
-
+    const fullPrompt = `${prompt.trim()}, high quality, detailed`.slice(0, 500);
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
       { inputs: fullPrompt }
     );
-
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
@@ -121,16 +137,13 @@ app.post("/text-to-video", async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-
     console.log("text-to-video:", prompt.slice(0, 60));
 
     const videoPrompt = `${prompt.trim()}, cinematic movie frame, motion blur, dynamic scene, film still, 4k`.slice(0, 500);
-
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
       { inputs: videoPrompt }
     );
-
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
@@ -141,22 +154,21 @@ app.post("/text-to-video", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  4. IMAGE TO VIDEO — accepts uploaded file
+//  4. IMAGE TO VIDEO
+//     Accepts: image_url OR image_base64
 // ═══════════════════════════════════════════════════════
-app.post("/image-to-video", upload.single("image"), async (req, res) => {
+app.post("/image-to-video", async (req, res) => {
   try {
-    const prompt = (req.body.prompt || "animate with smooth cinematic motion").trim();
-    if (!req.file) return res.status(400).json({ error: "Image file is required" });
+    const { prompt = "animate with smooth cinematic motion", image_url, image_base64 } = req.body;
+    if (!image_url && !image_base64) return res.status(400).json({ error: "image_url or image_base64 is required" });
 
-    console.log("image-to-video:", prompt.slice(0, 60));
+    console.log("image-to-video:", prompt.slice(0, 60), image_base64 ? "[base64]" : "[url]");
 
-    const videoPrompt = `${prompt}, dynamic motion, cinematic video frame, action scene, 4k film`.slice(0, 500);
-
+    const videoPrompt = `${prompt.trim()}, dynamic motion, cinematic video frame, 4k film`.slice(0, 500);
     const response = await hfInference(
       "black-forest-labs/FLUX.1-schnell",
       { inputs: videoPrompt }
     );
-
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
@@ -175,79 +187,46 @@ app.post("/text-to-audio", async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
     const HF_TOKEN = process.env.HF_TOKEN;
-    if (!HF_TOKEN) throw new Error("HF_TOKEN not set.");
+    if (!HF_TOKEN) throw new Error("HF_TOKEN not set");
 
     const cleanPrompt = prompt.trim().slice(0, 100);
     console.log("text-to-audio:", cleanPrompt);
 
+    // Use old stable API — router doesn't support TTS
     const MODELS = [
-      {
-        url: "https://router.huggingface.co/hf-inference/models/microsoft/speecht5_tts",
-        body: { inputs: cleanPrompt },
-        type: "audio/flac",
-      },
-      {
-        url: "https://router.huggingface.co/hf-inference/models/facebook/mms-tts-eng",
-        body: { inputs: cleanPrompt },
-        type: "audio/wav",
-      },
-      {
-        url: "https://router.huggingface.co/hf-inference/models/kakao-enterprise/vits-ljs",
-        body: { inputs: cleanPrompt },
-        type: "audio/flac",
-      },
+      { url: "https://api-inference.huggingface.co/models/microsoft/speecht5_tts", type: "audio/flac" },
+      { url: "https://api-inference.huggingface.co/models/facebook/mms-tts-eng", type: "audio/wav" },
+      { url: "https://api-inference.huggingface.co/models/kakao-enterprise/vits-ljs", type: "audio/flac" },
     ];
 
     for (const model of MODELS) {
       try {
         console.log("Trying:", model.url);
-        const r = await fetch(model.url, {
+        let r = await fetch(model.url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${HF_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(model.body),
+          headers: { "Authorization": `Bearer ${HF_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ inputs: cleanPrompt }),
           timeout: 60000,
         });
-
-        console.log("Status:", r.status);
-
         if (r.status === 503) {
-          console.log("Model loading, waiting 20s...");
           await delay(20000);
-          const r2 = await fetch(model.url, {
+          r = await fetch(model.url, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${HF_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(model.body),
+            headers: { "Authorization": `Bearer ${HF_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ inputs: cleanPrompt }),
             timeout: 60000,
           });
-          if (r2.ok) {
-            const buffer = await r2.buffer();
-            console.log("Audio success after retry! Bytes:", buffer.length);
-            res.set("Content-Type", model.type);
-            return res.send(buffer);
-          }
         }
-
         if (r.ok) {
           const buffer = await r.buffer();
           console.log("Audio success! Bytes:", buffer.length);
           res.set("Content-Type", model.type);
           return res.send(buffer);
         }
-
-        const errBody = await r.text().catch(() => "");
-        console.log("Failed:", r.status, errBody.slice(0, 100));
-      } catch (e) {
-        console.log("Model error:", e.message);
-      }
+        console.log("Failed:", r.status, (await r.text().catch(() => "")).slice(0, 80));
+      } catch (e) { console.log("Error:", e.message); }
     }
-
-    throw new Error("Audio generation failed. All models unavailable. Please try again later.");
+    throw new Error("Audio models unavailable. Please try again in 1 minute.");
   } catch (err) {
     console.error("text-to-audio error:", err.message);
     res.status(500).json({ error: err.message });
@@ -255,33 +234,29 @@ app.post("/text-to-audio", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  6. IMAGE UPSCALER — accepts uploaded file
+//  6. IMAGE UPSCALER
+//     Accepts: image_url OR image_base64
 // ═══════════════════════════════════════════════════════
-app.post("/upscale", upload.single("image"), async (req, res) => {
+app.post("/upscale", async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Image file is required" });
+    const { image_url, image_base64 } = req.body;
+    if (!image_url && !image_base64) return res.status(400).json({ error: "image_url or image_base64 is required" });
 
     const STABILITY_KEY = process.env.STABILITY_KEY;
-    if (!STABILITY_KEY) return res.status(500).json({ error: "STABILITY_KEY not set. Get free key at platform.stability.ai" });
+    if (!STABILITY_KEY) return res.status(500).json({ error: "STABILITY_KEY not set" });
 
-    console.log("upscale: received file", req.file.originalname);
+    console.log("upscale:", image_base64 ? "[base64 upload]" : image_url?.slice(0, 60));
 
-    const ext = req.file.mimetype.includes("png") ? "png" : "jpg";
+    const { buffer: imgBuffer, contentType: imgContentType } = await getImageBuffer(image_url, image_base64);
+    const ext = imgContentType.includes("png") ? "png" : "jpg";
 
     const form = new FormData();
-    form.append("image", req.file.buffer, {
-      filename: `image.${ext}`,
-      contentType: req.file.mimetype,
-    });
+    form.append("image", imgBuffer, { filename: `image.${ext}`, contentType: imgContentType });
     form.append("output_format", "jpeg");
 
     const upscaleRes = await fetch("https://api.stability.ai/v2beta/stable-image/upscale/fast", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${STABILITY_KEY}`,
-        Accept: "image/*",
-        ...form.getHeaders(),
-      },
+      headers: { Authorization: `Bearer ${STABILITY_KEY}`, Accept: "image/*", ...form.getHeaders() },
       body: form,
       timeout: 60000,
     });
@@ -301,32 +276,35 @@ app.post("/upscale", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  7. REMOVE BACKGROUND — accepts uploaded file
+//  7. REMOVE BACKGROUND
+//     Accepts: image_url OR image_base64
 // ═══════════════════════════════════════════════════════
-app.post("/remove-background", upload.single("image"), async (req, res) => {
+app.post("/remove-background", async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Image file is required" });
+    const { image_url, image_base64 } = req.body;
+    if (!image_url && !image_base64) return res.status(400).json({ error: "image_url or image_base64 is required" });
 
     const REMOVE_BG_KEY = process.env.REMOVE_BG_KEY;
-    if (!REMOVE_BG_KEY) return res.status(500).json({ error: "REMOVE_BG_KEY not set. Get free key at remove.bg/dashboard" });
+    if (!REMOVE_BG_KEY) return res.status(500).json({ error: "REMOVE_BG_KEY not set" });
 
-    console.log("remove-bg: received file", req.file.originalname);
-
-    const ext = req.file.mimetype.includes("png") ? "png" : "jpg";
+    console.log("remove-bg:", image_base64 ? "[base64 upload]" : image_url?.slice(0, 60));
 
     const form = new FormData();
-    form.append("image_file", req.file.buffer, {
-      filename: `image.${ext}`,
-      contentType: req.file.mimetype,
-    });
+
+    if (image_base64) {
+      // File uploaded from gallery — send as binary
+      const base64Data = image_base64.replace(/^data:image\/\w+;base64,/, "");
+      const imgBuffer = Buffer.from(base64Data, "base64");
+      form.append("image_file", imgBuffer, { filename: "upload.jpg", contentType: "image/jpeg" });
+    } else {
+      // URL provided
+      form.append("image_url", image_url);
+    }
     form.append("size", "auto");
 
     const response = await fetch("https://api.remove.bg/v1.0/removebg", {
       method: "POST",
-      headers: {
-        "X-Api-Key": REMOVE_BG_KEY,
-        ...form.getHeaders(),
-      },
+      headers: { "X-Api-Key": REMOVE_BG_KEY, ...form.getHeaders() },
       body: form,
       timeout: 60000,
     });
