@@ -387,13 +387,41 @@ export default function App() {
         throw new Error(errData.error || `Generation failed (${res.status})`);
       }
 
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const type = activeTool.id === "text-to-audio" ? "audio" : "image";
-      setResult({ type, url });
+      // ── Handle audio via Web Speech API ──────────────
+      if (activeTool.id === "text-to-audio") {
+        const data = await res.json();
+        const text = data.text || prompt;
 
-      await saveToHistory(user.uid, activeTool.id, url, prompt);
-      showToast("Generated successfully!", "success");
+        // Use browser's built-in speech synthesis
+        if (!window.speechSynthesis) throw new Error("Your browser doesn't support speech. Try Chrome.");
+
+        window.speechSynthesis.cancel(); // stop any previous speech
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        // Pick best available voice
+        const voices = window.speechSynthesis.getVoices();
+        const englishVoice = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google"))
+          || voices.find(v => v.lang.startsWith("en"))
+          || voices[0];
+        if (englishVoice) utterance.voice = englishVoice;
+
+        window.speechSynthesis.speak(utterance);
+        setResult({ type: "audio", text, utterance });
+        await saveToHistory(user.uid, activeTool.id, "", prompt);
+        showToast("Audio generated successfully!", "success");
+
+      } else {
+        // ── Handle image/video result ─────────────────
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setResult({ type: "image", url });
+        await saveToHistory(user.uid, activeTool.id, url, prompt);
+        showToast("Generated successfully!", "success");
+      }
 
     } catch (err) {
       setError(err.message);
@@ -729,9 +757,32 @@ export default function App() {
                     )}
                     {result.type==="audio" && (
                       <div className="audio-player">
-                        <div className="audio-label">◎ GENERATED AUDIO</div>
-                        <audio controls src={result.url} style={{ width:"100%", marginTop:10 }}/>
-                        <button className="overlay-btn" style={{ marginTop:10 }} onClick={() => download(result.url,"mp3")}>↓ Download Audio</button>
+                        <div className="audio-label">◎ TEXT TO SPEECH</div>
+                        <div style={{ fontSize:13, color:"var(--muted2)", marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>
+                          "{result.text}"
+                        </div>
+                        <div style={{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" }}>
+                          <button className="overlay-btn" onClick={() => {
+                            window.speechSynthesis.cancel();
+                            const u = new SpeechSynthesisUtterance(result.text);
+                            u.rate = 0.9; u.pitch = 1; u.volume = 1;
+                            const voices = window.speechSynthesis.getVoices();
+                            const v = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google")) || voices.find(v => v.lang.startsWith("en"));
+                            if (v) u.voice = v;
+                            window.speechSynthesis.speak(u);
+                          }}>▶ Play Again</button>
+                          <button className="overlay-btn" onClick={() => window.speechSynthesis.cancel()}>⏹ Stop</button>
+                          <button className="overlay-btn" onClick={() => {
+                            const blob = new Blob([result.text], { type: "text/plain" });
+                            const a = document.createElement("a");
+                            a.href = URL.createObjectURL(blob);
+                            a.download = `rp-vision-audio-${Date.now()}.txt`;
+                            a.click();
+                          }}>↓ Save Text</button>
+                        </div>
+                        <div style={{ fontSize:11, color:"var(--muted)", marginTop:12 }}>
+                          💡 Uses browser's built-in text-to-speech engine
+                        </div>
                       </div>
                     )}
                     {prompt && <div className="result-caption">"{prompt}"</div>}
