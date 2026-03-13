@@ -52,7 +52,7 @@ async function checkAndDeductCredits(uid, cost) {
   return true;
 }
 
-const CLOUDINARY_CLOUD = "PrakashDevX";
+const CLOUDINARY_CLOUD = "dt6dp806u";
 const CLOUDINARY_PRESET = "RPVISIONAI";
 
 async function uploadToCloudinary(blob) {
