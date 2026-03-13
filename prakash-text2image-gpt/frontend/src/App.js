@@ -570,9 +570,118 @@ export default function App() {
   const download = (url, ext = "png") => { const a = document.createElement("a"); a.href = url; a.download = `rp-vision-${Date.now()}.${ext}`; a.click(); };
 
   if (authLoading) return (
-    <div style={{ height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#03030a" }}>
-      <div style={{ width:48, height:48, border:"3px solid rgba(0,212,255,0.2)", borderTopColor:"#00d4ff", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-    </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes splashFadeIn { from{opacity:0;transform:scale(0.85)} to{opacity:1;transform:scale(1)} }
+        @keyframes logoFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        @keyframes gradShift { 0%{background-position:0%} 100%{background-position:200%} }
+        @keyframes ring1 { 0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.3} 50%{transform:translate(-50%,-50%) scale(1.12);opacity:0.8} }
+        @keyframes ring2 { 0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.2} 50%{transform:translate(-50%,-50%) scale(1.2);opacity:0.6} }
+        @keyframes ring3 { 0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.1} 50%{transform:translate(-50%,-50%) scale(1.3);opacity:0.4} }
+        @keyframes barLoad { 0%{width:0%} 60%{width:75%} 85%{width:88%} 100%{width:95%} }
+        @keyframes dotPulse { 0%,80%,100%{opacity:0.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
+        @keyframes particleFloat {
+          0%{transform:translateY(0px) translateX(0px);opacity:0}
+          10%{opacity:1}
+          90%{opacity:1}
+          100%{transform:translateY(-120px) translateX(var(--dx));opacity:0}
+        }
+        .splash-root {
+          position:fixed; inset:0; background:#03030a;
+          display:flex; flex-direction:column;
+          align-items:center; justify-content:center;
+          z-index:99999; overflow:hidden;
+        }
+        .splash-bg-glow1 { position:absolute; width:600px; height:600px; border-radius:50%; background:radial-gradient(circle,rgba(0,212,255,0.06) 0%,transparent 70%); top:50%; left:30%; transform:translate(-50%,-50%); pointer-events:none; }
+        .splash-bg-glow2 { position:absolute; width:500px; height:500px; border-radius:50%; background:radial-gradient(circle,rgba(139,92,246,0.05) 0%,transparent 70%); top:40%; left:70%; transform:translate(-50%,-50%); pointer-events:none; }
+        .splash-bg-glow3 { position:absolute; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(255,45,120,0.04) 0%,transparent 70%); top:70%; left:50%; transform:translate(-50%,-50%); pointer-events:none; }
+
+        .splash-content { display:flex; flex-direction:column; align-items:center; gap:0; animation:splashFadeIn 0.8s cubic-bezier(0.16,1,0.3,1) both; position:relative; z-index:1; }
+
+        .splash-logo-wrap { position:relative; width:160px; height:160px; display:flex; align-items:center; justify-content:center; margin-bottom:8px; }
+        .splash-ring { position:absolute; border-radius:50%; top:50%; left:50%; }
+        .splash-ring1 { width:160px; height:160px; border:1.5px solid rgba(0,212,255,0.3); animation:ring1 2.5s ease-in-out infinite; }
+        .splash-ring2 { width:200px; height:200px; border:1px solid rgba(139,92,246,0.2); animation:ring2 2.5s ease-in-out infinite 0.3s; }
+        .splash-ring3 { width:240px; height:240px; border:1px solid rgba(255,45,120,0.12); animation:ring3 2.5s ease-in-out infinite 0.6s; }
+
+        .splash-logo-img { width:110px; height:110px; object-fit:contain; position:relative; z-index:2;
+          filter:drop-shadow(0 0 30px rgba(0,212,255,0.6)) drop-shadow(0 0 60px rgba(139,92,246,0.4)) drop-shadow(0 0 90px rgba(255,45,120,0.2));
+          animation:logoFloat 3s ease-in-out infinite; }
+
+        .splash-arc { position:absolute; width:140px; height:140px; border-radius:50%; border:2.5px solid transparent;
+          border-top-color:#00d4ff; border-right-color:rgba(0,212,255,0.3);
+          animation:spin 1.2s linear infinite; top:50%; left:50%; transform:translate(-50%,-50%); }
+        .splash-arc2 { position:absolute; width:155px; height:155px; border-radius:50%; border:1.5px solid transparent;
+          border-bottom-color:#8b5cf6; border-left-color:rgba(139,92,246,0.3);
+          animation:spin 1.8s linear infinite reverse; top:50%; left:50%; transform:translate(-50%,-50%); }
+
+        .splash-brand { font-family:'Orbitron',monospace; font-size:1.7rem; font-weight:900; letter-spacing:0.25em;
+          background:linear-gradient(135deg,#00d4ff 0%,#8b5cf6 45%,#ff2d78 80%,#00d4ff 100%);
+          background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+          background-clip:text; animation:gradShift 3s linear infinite; margin-top:28px; }
+        .splash-sub { font-family:'Rajdhani',sans-serif; font-size:0.72rem; letter-spacing:0.55em; text-transform:uppercase; color:rgba(255,255,255,0.28); margin-top:8px; }
+
+        .splash-bar-wrap { width:200px; height:2px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; margin-top:40px; }
+        .splash-bar-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#00d4ff,#8b5cf6,#ff2d78); animation:barLoad 2.5s ease-out forwards; }
+
+        .splash-dots { display:flex; gap:6px; margin-top:18px; }
+        .splash-dot { width:5px; height:5px; border-radius:50%; }
+        .sd1 { background:#00d4ff; animation:dotPulse 1.2s ease-in-out infinite 0s; }
+        .sd2 { background:#8b5cf6; animation:dotPulse 1.2s ease-in-out infinite 0.2s; }
+        .sd3 { background:#ff2d78; animation:dotPulse 1.2s ease-in-out infinite 0.4s; }
+
+        .splash-status { font-family:'Rajdhani',sans-serif; font-size:0.75rem; letter-spacing:0.15em; color:rgba(255,255,255,0.2); margin-top:14px; }
+
+        .splash-particle { position:absolute; width:4px; height:4px; border-radius:50%; animation:particleFloat 3s ease-out infinite; }
+      `}</style>
+      <div className="splash-root">
+        <div className="splash-bg-glow1" />
+        <div className="splash-bg-glow2" />
+        <div className="splash-bg-glow3" />
+
+        {/* Floating particles */}
+        {[
+          {left:"45%",color:"#00d4ff",delay:"0s",dx:"20px"},
+          {left:"50%",color:"#8b5cf6",delay:"0.8s",dx:"-15px"},
+          {left:"55%",color:"#ff2d78",delay:"1.6s",dx:"25px"},
+          {left:"48%",color:"#00d4ff",delay:"2.2s",dx:"-20px"},
+          {left:"52%",color:"#8b5cf6",delay:"0.4s",dx:"10px"},
+        ].map((p,i) => (
+          <div key={i} className="splash-particle" style={{
+            left:p.left, bottom:"35%", background:p.color, boxShadow:`0 0 6px ${p.color}`,
+            animationDelay:p.delay, "--dx":p.dx, opacity:0
+          }} />
+        ))}
+
+        <div className="splash-content">
+          <div className="splash-logo-wrap">
+            <div className="splash-ring splash-ring1" />
+            <div className="splash-ring splash-ring2" />
+            <div className="splash-ring splash-ring3" />
+            <div className="splash-arc" />
+            <div className="splash-arc2" />
+            <img src="/logo192.png" alt="RP Vision AI" className="splash-logo-img" />
+          </div>
+
+          <div className="splash-brand">RP VISION AI</div>
+          <div className="splash-sub">Create Without Limits</div>
+
+          <div className="splash-bar-wrap">
+            <div className="splash-bar-fill" />
+          </div>
+
+          <div className="splash-dots">
+            <div className="splash-dot sd1" />
+            <div className="splash-dot sd2" />
+            <div className="splash-dot sd3" />
+          </div>
+
+          <div className="splash-status">Initializing AI Engine...</div>
+        </div>
+      </div>
+    </>
   );
 
   if (!user) return <LoginScreen onLogin={handleLogin} />;
