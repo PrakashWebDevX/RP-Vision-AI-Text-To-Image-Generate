@@ -100,6 +100,8 @@ async function deleteHistoryItem(docId) {
     return false;
   }
 }
+
+async function fetchHistory(uid) {
   try {
     console.log("📜 Fetching history for uid:", uid);
     const q = query(collection(db, "history"), where("uid","==",uid), orderBy("createdAt","desc"), limit(20));
