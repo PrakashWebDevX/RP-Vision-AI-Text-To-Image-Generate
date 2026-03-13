@@ -52,6 +52,28 @@ async function checkAndDeductCredits(uid, cost) {
   return true;
 }
 
+const CLOUDINARY_CLOUD = "dt6dp806u";
+const CLOUDINARY_PRESET = "RPVISIONAI";
+
+async function uploadToCloudinary(blob) {
+  try {
+    const fd = new FormData();
+    fd.append("file", blob);
+    fd.append("upload_preset", CLOUDINARY_PRESET);
+    fd.append("folder", "rp-vision-ai");
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+      method: "POST",
+      body: fd,
+    });
+    const data = await res.json();
+    if (data.secure_url) return data.secure_url;
+    throw new Error("Cloudinary upload failed");
+  } catch (err) {
+    console.error("Cloudinary error:", err);
+    return null;
+  }
+}
+
 async function saveToHistory(uid, toolId, outputUrl, prompt) {
   await addDoc(collection(db, "history"), { uid, toolId, outputUrl, prompt, createdAt: serverTimestamp() });
 }
@@ -495,9 +517,11 @@ export default function App() {
         showToast("Audio generated successfully!", "success");
       } else {
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        setResult({ type:"image", url });
-        await saveToHistory(user.uid, activeTool.id, url, prompt);
+        const localUrl = URL.createObjectURL(blob);
+        setResult({ type:"image", url:localUrl });
+        // Upload to Cloudinary for permanent storage
+        const cloudUrl = await uploadToCloudinary(blob);
+        await saveToHistory(user.uid, activeTool.id, cloudUrl || localUrl, prompt);
         showToast("Generated successfully!", "success");
       }
     } catch (err) { setError(err.message); showToast(err.message, "error"); }
