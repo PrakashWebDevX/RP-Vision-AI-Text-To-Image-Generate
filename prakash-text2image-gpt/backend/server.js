@@ -247,9 +247,65 @@ app.post("/remove-background", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
+//  RAZORPAY — Create Order
+// ═══════════════════════════════════════════════════════
+app.post("/create-order", async (req, res) => {
+  try {
+    const { amount, currency, planId } = req.body;
+    const key = process.env.RAZORPAY_KEY_ID;
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!key || !secret) return res.status(500).json({ error: "Razorpay keys not configured" });
+
+    const response = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Basic " + Buffer.from(`${key}:${secret}`).toString("base64"),
+      },
+      body: JSON.stringify({ amount, currency: currency || "INR", receipt: `rcpt_${planId}_${Date.now()}` }),
+    });
+    const order = await response.json();
+    if (!order.id) throw new Error(order.error?.description || "Order creation failed");
+    console.log("✅ Razorpay order created:", order.id);
+    res.json(order);
+  } catch (err) {
+    console.error("create-order error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  RAZORPAY — Verify Payment
+// ═══════════════════════════════════════════════════════
+app.post("/verify-payment", async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, uid } = req.body;
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) return res.status(500).json({ error: "Razorpay secret not configured" });
+
+    const crypto = require("crypto");
+    const hmac = crypto.createHmac("sha256", secret);
+    hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const digest = hmac.digest("hex");
+
+    if (digest === razorpay_signature) {
+      console.log("✅ Payment verified! Plan:", planId, "User:", uid);
+      res.json({ success: true, planId, uid });
+    } else {
+      console.error("❌ Payment signature mismatch!");
+      res.status(400).json({ success: false, error: "Invalid payment signature" });
+    }
+  } catch (err) {
+    console.error("verify-payment error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
 app.listen(PORT, () => {
   console.log(`✅ RP Vision AI backend running on port ${PORT}`);
   console.log(`HF_TOKEN: ${process.env.HF_TOKEN ? "✅ SET" : "❌ NOT SET"}`);
   console.log(`STABILITY_KEY: ${process.env.STABILITY_KEY ? "✅ SET" : "❌ NOT SET"}`);
   console.log(`REMOVE_BG_KEY: ${process.env.REMOVE_BG_KEY ? "✅ SET" : "❌ NOT SET"}`);
+  console.log(`RAZORPAY: ${process.env.RAZORPAY_KEY_ID ? "✅ SET" : "❌ NOT SET"}`);
 });
