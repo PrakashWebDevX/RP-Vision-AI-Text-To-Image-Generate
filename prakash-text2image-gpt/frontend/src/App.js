@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 
 const BACKEND = "https://rp-vision-backend.onrender.com";
-const RAZORPAY_KEY_ID = "rzp_test_STpHHPYImiJnb4";
+const RAZORPAY_KEY_ID = "rzp_live_SUFBH3FrVkhnDX";
 
 const PLANS = [
   {
