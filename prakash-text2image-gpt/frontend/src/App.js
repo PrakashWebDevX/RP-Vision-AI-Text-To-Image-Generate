@@ -542,8 +542,9 @@ export default function App() {
     if (loading) return;
     const needsFile   = ["image-to-image","remove-bg","upscale","image-to-video"].includes(activeTool.id);
     const needsPrompt = !["upscale","remove-bg","image-to-video"].includes(activeTool.id);
-    if (needsPrompt && !prompt.trim()) { showToast("Please enter a prompt!", "error"); return; }
-    if (needsFile && !inputFile) { showToast("Please upload an image first!", "error"); return; }
+    const promptOptional = ["image-to-video"].includes(activeTool.id);
+    if (needsPrompt && !promptOptional && !prompt.trim()) { showToast("Please enter a prompt!", "error"); return; }
+    if (needsFile && !inputFile) { showToast("Please upload an image first! Click the upload box above.", "error"); return; }
     if (creditsLeft < activeTool.credits) { setShowUpgrade(true); return; }
 
     setError(null); setResult(null); setLoading(true); startProgress();
@@ -667,6 +668,7 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={handleLogin}/>;
 
   const needsImageInput = ["image-to-image","image-to-video","upscale","remove-bg"].includes(activeTool.id);
+  const needsFile = needsImageInput;
   const planInfo = PLANS.find(p=>p.id===userPlan);
 
   return (
@@ -991,15 +993,31 @@ export default function App() {
                     <div className="ctrl-lbl">Prompt</div>
                     <div className="prompt-wrap">
                       <textarea value={prompt} onChange={e=>setPrompt(e.target.value.slice(0,500))}
-                        placeholder={activeTool.id==="text-to-audio"?"Enter text to speak..." : activeTool.id==="image-to-video"?"Describe the animation..." : "Describe what you want to create..."} rows={4}/>
+                        placeholder={
+                          activeTool.id==="text-to-audio" ? "Enter any text to convert to speech..." :
+                          activeTool.id==="image-to-video" ? "Optional: Describe the motion/animation..." :
+                          activeTool.id==="image-to-image" ? "Describe how to transform the image..." :
+                          activeTool.id==="text-to-video" ? "Describe the cinematic scene..." :
+                          "Describe what you want to create..."
+                        } rows={4}/>
                       <span className="char-count">{prompt.length}/500</span>
                     </div>
                   </div>
                 )}
                 {needsImageInput && (
                   <div className="ctrl-section">
-                    <div className="ctrl-lbl">Upload Image</div>
+                    <div className="ctrl-lbl">
+                      {activeTool.id==="upscale" ? "📤 Upload Image to Upscale" :
+                       activeTool.id==="remove-bg" ? "📤 Upload Image to Remove Background" :
+                       activeTool.id==="image-to-image" ? "📤 Upload Source Image" :
+                       "📤 Upload Image to Animate"}
+                    </div>
                     <ImageUploader file={inputFile} previewUrl={inputPreviewUrl} onFileChange={handleFileChange} onClear={handleFileClear}/>
+                    {!inputFile && (
+                      <div style={{fontSize:11,color:"var(--red)",textAlign:"center",marginTop:4,padding:"6px 10px",background:"rgba(231,76,60,0.06)",borderRadius:8,border:"1px solid rgba(231,76,60,0.15)"}}>
+                        ⚠️ You must upload an image before generating
+                      </div>
+                    )}
                   </div>
                 )}
                 {["text-to-image","image-to-image"].includes(activeTool.id) && (
@@ -1012,9 +1030,14 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <button className="gen-btn" disabled={loading} onClick={generate}>
+                <button className="gen-btn" disabled={loading||(needsFile&&!inputFile)} onClick={generate}>
                   {loading ? <><div className="spinner" style={{width:20,height:20,borderWidth:2}}/>&nbsp;<span>Generating...</span></> : <><span>{activeTool.icon} Generate</span><span className="gen-btn-credits">{activeTool.credits} cr</span></>}
                 </button>
+                {needsFile && !inputFile && !loading && (
+                  <div style={{fontSize:11,color:"var(--muted2)",textAlign:"center"}}>
+                    👆 Upload an image above to enable generation
+                  </div>
+                )}
                 {creditsLeft < activeTool.credits && !loading && (
                   <div style={{fontSize:11,color:"var(--red)",textAlign:"center",cursor:"pointer"}} onClick={()=>setShowUpgrade(true)}>
                     Not enough credits. <u>Upgrade now →</u>
