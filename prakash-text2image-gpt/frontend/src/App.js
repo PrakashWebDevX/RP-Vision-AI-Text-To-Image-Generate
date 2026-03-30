@@ -10,33 +10,9 @@ import {
 const BACKEND = "https://rp-vision-backend.onrender.com";
 const RAZORPAY_KEY_ID = "rzp_live_SUFBH3FrVkhnDX";
 
-const PLANS = [
-  { id:"starter", name:"Starter", price:99, credits:500, color:"var(--cyan)", dim:"var(--cyan-dim)", border:"rgba(0,212,255,0.3)", tag:null,
-    features:["500 credits/month","All 7 AI tools","HD image quality","Email support"] },
-  { id:"pro", name:"Pro", price:299, credits:2000, color:"var(--purple)", dim:"var(--purple-dim)", border:"rgba(139,92,246,0.3)", tag:"MOST POPULAR",
-    features:["2000 credits/month","All 7 AI tools","4K image quality","Priority support"] },
-  { id:"unlimited", name:"Unlimited", price:599, credits:99999, color:"var(--pink)", dim:"var(--pink-dim)", border:"rgba(255,45,120,0.3)", tag:"BEST VALUE",
-    features:["Unlimited credits","All 7 AI tools","4K image quality","24/7 support"] },
-];
-
-const TOOLS = [
-  { id:"text-to-image", label:"Text to Image", icon:"⬡", credits:1, desc:"Generate images from text prompts" },
-  { id:"image-to-image", label:"Image to Image", icon:"⬢", credits:2, desc:"Transform images with AI" },
-  { id:"text-to-video", label:"Text to Video", icon:"◈", credits:5, desc:"Generate cinematic video frames" },
-  { id:"image-to-video", label:"Image to Video", icon:"◉", credits:5, desc:"Animate any image with AI" },
-  { id:"text-to-audio", label:"Text to Audio", icon:"◎", credits:3, desc:"Generate speech from text" },
-  { id:"upscale", label:"Image Upscaler", icon:"◐", credits:2, desc:"Upscale images to HD quality" },
-  { id:"remove-bg", label:"Remove Background", icon:"◑", credits:1, desc:"Remove image backgrounds instantly" },
-];
-
-const STYLES = [
-  { label:"Photorealistic", tag:"photorealistic, 8k ultra detailed, RAW photo" },
-  { label:"Cinematic", tag:"cinematic lighting, movie still, dramatic, anamorphic" },
-  { label:"Anime", tag:"anime style, studio ghibli, vibrant, detailed illustration" },
-  { label:"Oil Paint", tag:"oil painting, classical art, textured canvas, masterpiece" },
-  { label:"Cyberpunk", tag:"cyberpunk, neon lights, futuristic, blade runner aesthetic" },
-  { label:"Fantasy", tag:"fantasy art, magical, ethereal lighting, concept art" },
-];
+const PLANS = [ /* your PLANS array */ ];
+const TOOLS = [ /* your TOOLS array */ ];
+const STYLES = [ /* your STYLES array */ ];
 
 const CHAT_MODELS = [
   { value: "claude", label: "Claude Sonnet 4.6", icon: "🌟" },
@@ -51,124 +27,8 @@ const CLOUDINARY_PRESET = "RPVISIONAI";
 
 function todayKey() { return new Date().toISOString().split("T")[0]; }
 
-// ================== HELPER FUNCTIONS ==================
-async function getOrCreateUser(user) {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, { uid:user.uid, email:user.email, name:user.displayName, photo:user.photoURL, plan:"free", planCredits:0, createdAt:serverTimestamp(), credits:{ date:todayKey(), used:0 } });
-    return { plan:"free", planCredits:0, credits:{ date:todayKey(), used:0 } };
-  }
-  return snap.data();
-}
+// Keep all your helper functions (getOrCreateUser, checkAndDeductCredits, uploadToCloudinary, saveToHistory, fetchHistory, deleteHistoryItem, loadRazorpayScript, initiatePayment) exactly as they are in your file.
 
-async function checkAndDeductCredits(uid, cost, plan) {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  const data = snap.data();
-  const today = todayKey();
-  if (plan !== "free" && plan !== undefined) {
-    if (plan === "unlimited") return true;
-    const pc = data.planCredits || 0;
-    if (pc < cost) return false;
-    await updateDoc(ref, { planCredits: pc - cost });
-    return true;
-  }
-  let used = data.credits?.date === today ? data.credits.used : 0;
-  if (used + cost > FREE_CREDITS_PER_DAY) return false;
-  await updateDoc(ref, { credits:{ date:today, used:used+cost } });
-  return true;
-}
-
-async function uploadToCloudinary(blob) {
-  try {
-    const fd = new FormData();
-    fd.append("file", blob);
-    fd.append("upload_preset", CLOUDINARY_PRESET);
-    fd.append("folder", "rp-vision-ai");
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method:"POST", body:fd });
-    const data = await res.json();
-    return data.secure_url || null;
-  } catch (err) { console.error("Cloudinary error:", err); return null; }
-}
-
-async function saveToHistory(uid, toolId, outputUrl, prompt) {
-  try { await addDoc(collection(db, "history"), { uid, toolId, outputUrl, prompt, createdAt:serverTimestamp() }); }
-  catch (err) { console.error("saveToHistory error:", err); }
-}
-
-async function fetchHistory(uid) {
-  try {
-    const q = query(collection(db,"history"), where("uid","==",uid), orderBy("createdAt","desc"), limit(20));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id:d.id, ...d.data() }));
-  } catch (err) { console.error("fetchHistory error:", err); return []; }
-}
-
-async function deleteHistoryItem(docId) {
-  try { await deleteDoc(doc(db,"history",docId)); return true; }
-  catch (err) { console.error("Delete error:", err); return false; }
-}
-
-// Razorpay
-function loadRazorpayScript() {
-  return new Promise((resolve) => {
-    if (window.Razorpay) { resolve(true); return; }
-    const s = document.createElement("script");
-    s.src = "https://checkout.razorpay.com/v1/checkout.js";
-    s.onload = () => resolve(true);
-    s.onerror = () => resolve(false);
-    document.body.appendChild(s);
-  });
-}
-
-async function initiatePayment(plan, user, onSuccess, onError) {
-  const loaded = await loadRazorpayScript();
-  if (!loaded) { onError("Failed to load payment gateway. Please try again."); return; }
-  try {
-    const res = await fetch(`${BACKEND}/create-order`, {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ amount:plan.price*100, currency:"INR", planId:plan.id }),
-    });
-    const order = await res.json();
-    if (!order.id) throw new Error("Order creation failed");
-
-    const options = {
-      key: RAZORPAY_KEY_ID,
-      amount: plan.price * 100,
-      currency: "INR",
-      name: "RP Vision AI",
-      description: `${plan.name} Plan — ${plan.credits === 99999 ? "Unlimited" : plan.credits} credits`,
-      image: "/logo192.png",
-      order_id: order.id,
-      prefill: { name:user.displayName, email:user.email },
-      theme: { color:"#8b5cf6" },
-      handler: async (response) => {
-        try {
-          const vRes = await fetch(`${BACKEND}/verify-payment`, {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({ ...response, planId:plan.id, uid:user.uid }),
-          });
-          const vData = await vRes.json();
-          if (vData.success) {
-            await updateDoc(doc(db,"users",user.uid), {
-              plan: plan.id,
-              planCredits: plan.credits === 99999 ? 99999 : plan.credits,
-            });
-            onSuccess(plan);
-          } else { onError("Payment verification failed. Contact support."); }
-        } catch (e) { onError("Verification error: " + e.message); }
-      },
-      modal: { ondismiss: () => {} },
-    };
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-  } catch (err) { onError("Payment error: " + err.message); }
-}
-
-// ================== COMPONENTS ==================
 function Spinner() { return <div className="spinner" />; }
 function Toast({ msg, type }) { return msg ? <div className={"toast toast-"+type}>{msg}</div> : null; }
 
@@ -197,107 +57,8 @@ function ImageUploader({ file, previewUrl, onFileChange, onClear }) {
   );
 }
 
-function UpgradeModal({ user, onClose, onSuccess, showToast }) {
-  const [paying, setPaying] = useState(null);
-  const handlePay = async (plan) => {
-    setPaying(plan.id);
-    await initiatePayment(plan, user, (p) => { onSuccess(p); showToast(`🎉 ${p.name} plan activated! Enjoy your credits!`, "success"); onClose(); }, (err) => { showToast(err, "error"); setPaying(null); });
-    setPaying(null);
-  };
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>✕</button>
-        <div className="modal-header">
-          <div className="modal-title">UPGRADE YOUR PLAN</div>
-          <div className="modal-sub">Choose the plan that fits your needs</div>
-        </div>
-        <div className="modal-plans">
-          {PLANS.map(plan => (
-            <div key={plan.id} className={"modal-plan"+(plan.tag==="MOST POPULAR"?" modal-plan-popular":"")} style={{"--pc":plan.color,"--pb":plan.border,"--pd":plan.dim}}>
-              {plan.tag && <div className="plan-tag" style={{background:plan.color,color:plan.id==="pro"?"#fff":"#000"}}>{plan.tag}</div>}
-              <div className="plan-name" style={{color:plan.color}}>{plan.name}</div>
-              <div className="plan-price">
-                <span className="plan-rs">₹</span>
-                <span className="plan-amount">{plan.price}</span>
-                <span className="plan-period">/month</span>
-              </div>
-              <div className="plan-credits" style={{color:plan.color}}>
-                {plan.credits===99999?"Unlimited":plan.credits} credits
-              </div>
-              <div className="plan-features">
-                {plan.features.map((f,i) => (
-                  <div key={i} className="plan-feature">
-                    <span style={{color:plan.color}}>✓</span> {f}
-                  </div>
-                ))}
-              </div>
-              <button className="plan-btn" style={{background:plan.color,color:plan.id==="unlimited"?"#fff":"#000"}} disabled={paying===plan.id} onClick={()=>handlePay(plan)}>
-                {paying===plan.id ? <span className="btn-spin"/> : `Pay ₹${plan.price}`}
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="modal-footer">
-          <span>🔒 Secured by Razorpay</span>
-          <span>✅ UPI · GPay · PhonePe · Cards</span>
-          <span>🔄 Cancel anytime</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Keep your UpgradeModal and LoginScreen exactly as they are in your original file.
 
-function LoginScreen({ onLogin }) {
-  const [loading, setLoading] = useState(false);
-  const canvasRef = useRef(null);
-  const handleLogin = async () => { setLoading(true); try { await onLogin(); } finally { setLoading(false); } };
-
-  // Canvas animation (your original)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let W = canvas.width = canvas.offsetWidth;
-    let H = canvas.height = canvas.offsetHeight;
-    let animId;
-    // ... (your full canvas animation code - keep it as is from your original file)
-    // For brevity, I'm keeping placeholder. Paste your full LoginScreen canvas code here if needed.
-  }, []);
-
-  return (
-    <>
-      <style>{`
-        /* Your full login screen CSS - paste your original style block here */
-      `}</style>
-      <div className="login-root">
-        <canvas ref={canvasRef} className="login-canvas"/>
-        <div className="login-page">
-          <div className="login-left">
-            <div className="logo-container">
-              <div className="logo-glow-ring"/><div className="logo-glow-ring2"/>
-              <img src="/logo192.png" alt="RP Vision AI" className="logo-img"/>
-            </div>
-            <div className="brand-title">RP VISION AI</div>
-            <div className="brand-sub">Create Without Limits</div>
-            {/* stats and features */}
-          </div>
-          <div className="login-right">
-            <div className="login-card">
-              <div className="card-bg">
-                <button className="google-btn" onClick={handleLogin} disabled={loading}>
-                  {loading ? <div className="btn-spinner"/> : "Continue with Google"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ================== MAIN APP ==================
 export default function App() {
   const [user, setUser] = useState(null);
   const [userPlan, setUserPlan] = useState("free");
@@ -320,7 +81,7 @@ export default function App() {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
-  // Chat States
+  // NEW CHAT STATES
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [selectedChatModel, setSelectedChatModel] = useState("claude");
@@ -328,16 +89,9 @@ export default function App() {
 
   const progressRef = useRef(null);
 
-  // ... (keep your existing useEffects, generate function, etc. - I have fixed the fetch lines)
+  // Keep all your existing useEffect, handleFileChange, generate, loadHistory, download, handleUpgradeSuccess etc.
 
-  const generate = useCallback(async () => {
-    // Your original generate function with fixed fetch
-    if (loading) return;
-    // ... your full generate logic (I fixed the fetch lines in previous messages)
-    // For space, assume you paste your original generate here with fixed `${BACKEND}/${endpoint}`
-  }, [/* dependencies */]);
-
-  // NEW CHAT FUNCTIONS
+  // NEW: Send Chat Message
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
     const userMsg = { role: "user", content: chatInput.trim() };
@@ -349,12 +103,17 @@ export default function App() {
       const res = await fetch(`${BACKEND}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...chatMessages, userMsg], model: selectedChatModel })
+        body: JSON.stringify({
+          messages: [...chatMessages, userMsg],
+          model: selectedChatModel
+        })
       });
       const data = await res.json();
-      if (data.reply) setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
+      if (data.reply) {
+        setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
+      }
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: "assistant", content: "Chat service busy. Try again." }]);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Chat service is busy. Please try again." }]);
     } finally {
       setChatLoading(false);
     }
@@ -362,7 +121,10 @@ export default function App() {
 
   const startVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return showToast("Voice not supported", "error");
+    if (!SpeechRecognition) {
+      showToast("Voice input not supported in your browser", "error");
+      return;
+    }
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.onresult = (e) => setChatInput(e.results[0][0].transcript);
@@ -374,29 +136,35 @@ export default function App() {
 
   return (
     <>
+      {/* Your full <style> tag with all CSS - keep exactly as in your original file */}
+
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
       {sidebarOpen && <div className="mobile-overlay" onClick={()=>setSidebarOpen(false)}/>}
-      {showUpgrade && <UpgradeModal user={user} onClose={()=>setShowUpgrade(false)} onSuccess={(p)=>{setUserPlan(p.id); setPlanCredits(p.credits);}} showToast={showToast}/>}
+      {showUpgrade && <UpgradeModal user={user} onClose={()=>setShowUpgrade(false)} onSuccess={handleUpgradeSuccess} showToast={showToast}/>}
 
       <div className="app">
         <aside className={"sidebar"+(sidebarOpen?" open":"")}>
-          {/* Sidebar - your original + AI Chat button */}
+          {/* Your original sidebar brand, credits, nav-section for tools */}
+
           <div className="nav-section">
             <div className="nav-label">AI Tools</div>
             {TOOLS.map(t => (
-              <div key={t.id} className={"nav-item"+(activeTool.id===t.id && view==="create"?" active":"")}
+              <div key={t.id} className={"nav-item"+(activeTool.id===t.id&&view==="create"?" active":"")}
                 onClick={()=>{ setActiveTool(t); setView("create"); setResult(null); setError(null); setSidebarOpen(false); }}>
                 <span className="nav-icon">{t.icon}</span>
                 <span className="nav-lbl">{t.label}</span>
                 <span className="nav-cr">{t.credits}cr</span>
               </div>
             ))}
-            <div className={"nav-item"+(view==="chat"?" active":"")} onClick={()=>{ setView("chat"); setSidebarOpen(false); }}>
+            {/* NEW AI CHAT BUTTON */}
+            <div className={"nav-item"+(view==="chat"?" active":"")} onClick={() => { setView("chat"); setSidebarOpen(false); }}>
               <span className="nav-icon">💬</span>
               <span className="nav-lbl">AI Chat Agent</span>
               <span className="nav-cr">Free</span>
             </div>
           </div>
+
+          {/* Your original sidebar-views for History and Profile */}
         </aside>
 
         <main className="main">
@@ -406,52 +174,74 @@ export default function App() {
               <div className="topbar-desc">{view === "chat" ? "Ask anything — Coding, Questions, News, Jokes..." : activeTool.desc}</div>
             </div>
             {view === "chat" && (
-              <select value={selectedChatModel} onChange={e => setSelectedChatModel(e.target.value)}>
+              <select value={selectedChatModel} onChange={(e) => setSelectedChatModel(e.target.value)}>
                 {CHAT_MODELS.map(m => <option key={m.value} value={m.value}>{m.icon} {m.label}</option>)}
               </select>
             )}
           </div>
 
-          {/* Create View */}
-          {view === "create" && (
+          <div className="progress-bar">
+            <div className="progress-fill-bar" style={{width:progress+"%"}}/>
+          </div>
+
+          {/* Your original create view */}
+          {view==="create" && (
             <div className="workspace">
-              {/* YOUR ORIGINAL CONTROLS + CANVAS HERE */}
-              {/* Paste your full original workspace code (controls and canvas) in this block */}
+              {/* YOUR ORIGINAL CONTROLS AND CANVAS CODE HERE */}
+              {/* Paste the full <div className="controls"> ... </div> and <div className="canvas"> ... </div> from your original file */}
             </div>
           )}
 
-          {/* Chat View */}
+          {/* AI CHAT VIEW */}
           {view === "chat" && (
-            <div className="workspace" style={{flexDirection: "column"}}>
+            <div className="workspace" style={{flexDirection: "column", overflow: "hidden"}}>
               <div style={{flex:1, padding:"20px", display:"flex", flexDirection:"column"}}>
                 <div style={{flex:1, overflowY:"auto", background:"var(--card)", borderRadius:"16px", padding:"20px", marginBottom:"16px"}}>
                   {chatMessages.length === 0 ? (
-                    <div style={{textAlign:"center", padding:"60px", opacity:0.7}}>
-                      <div style={{fontSize:"48px"}}>💬</div>
-                      <div>Free AI Chat Agent</div>
+                    <div style={{textAlign:"center", padding:"80px 20px", opacity:0.7}}>
+                      <div style={{fontSize:"60px"}}>💬</div>
+                      <div style={{fontSize:"20px", fontWeight:600}}>Free AI Chat Agent</div>
+                      <div style={{fontSize:"14px", color:"var(--muted2)"}}>Ask anything: Coding, News, Jokes, General Questions...</div>
                     </div>
-                  ) : chatMessages.map((msg, i) => (
-                    <div key={i} style={{marginBottom:"16px", textAlign: msg.role === "user" ? "right" : "left"}}>
-                      <div style={{display:"inline-block", maxWidth:"80%", padding:"12px 16px", borderRadius:"16px", background: msg.role === "user" ? "var(--cyan-dim)" : "var(--card2)"}}>
-                        {msg.content}
+                  ) : (
+                    chatMessages.map((msg, i) => (
+                      <div key={i} style={{marginBottom: "18px", textAlign: msg.role === "user" ? "right" : "left"}}>
+                        <div style={{
+                          display: "inline-block",
+                          maxWidth: "75%",
+                          padding: "13px 17px",
+                          borderRadius: "16px",
+                          background: msg.role === "user" ? "var(--cyan-dim)" : "var(--card2)"
+                        }}>
+                          {msg.content}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                   {chatLoading && <div>Thinking...</div>}
                 </div>
 
                 <div style={{display:"flex", gap:"10px"}}>
-                  <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==="Enter"&&sendChatMessage()} placeholder="Ask anything..." style={{flex:1, padding:"14px", borderRadius:"12px"}} />
-                  <button onClick={startVoiceInput} style={{padding:"14px", borderRadius:"12px", background:"#8b5cf6"}}>🎤</button>
-                  <button onClick={sendChatMessage} disabled={!chatInput.trim() || chatLoading} style={{padding:"14px 24px", borderRadius:"12px", background:"linear-gradient(var(--cyan),var(--purple))", color:"white"}}>Send</button>
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyPress={e => e.key === "Enter" && sendChatMessage()}
+                    placeholder="Ask anything... (coding, jokes, news...)"
+                    style={{flex:1, padding:"14px 18px", borderRadius:"12px", background:"var(--card)", border:"1px solid var(--border2)"}}
+                  />
+                  <button onClick={startVoiceInput} style={{padding:"14px 18px", borderRadius:"12px", background:"var(--purple-dim)", border:"none", fontSize:"20px"}}>🎤</button>
+                  <button onClick={sendChatMessage} disabled={!chatInput.trim() || chatLoading}
+                    style={{padding:"14px 28px", borderRadius:"12px", background:"linear-gradient(135deg, var(--cyan), var(--purple))", color:"#fff", border:"none"}}>
+                    Send
+                  </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* History and Profile */}
-          {view==="history" && (/* your original history JSX */)}
-          {view==="profile" && (/* your original profile JSX */)}
+          {/* Your original history and profile views */}
+          {view==="history" && ( /* your original history */ )}
+          {view==="profile" && ( /* your original profile */ )}
         </main>
       </div>
     </>
