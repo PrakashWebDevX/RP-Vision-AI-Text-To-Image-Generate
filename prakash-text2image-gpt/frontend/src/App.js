@@ -11,24 +11,9 @@ const BACKEND = "https://rp-vision-backend.onrender.com";
 const RAZORPAY_KEY_ID = "rzp_live_SUFBH3FrVkhnDX";
 
 const PLANS = [
-  {
-    id: "starter", name: "Starter", price: 99, credits: 500,
-    color: "var(--cyan)", dim: "var(--cyan-dim)", border: "rgba(0,212,255,0.3)",
-    tag: null,
-    features: ["500 credits/month", "All 7 AI tools", "HD image quality", "Email support"],
-  },
-  {
-    id: "pro", name: "Pro", price: 299, credits: 2000,
-    color: "var(--purple)", dim: "var(--purple-dim)", border: "rgba(139,92,246,0.3)",
-    tag: "MOST POPULAR",
-    features: ["2000 credits/month", "All 7 AI tools", "4K image quality", "Priority support"],
-  },
-  {
-    id: "unlimited", name: "Unlimited", price: 599, credits: 99999,
-    color: "var(--pink)", dim: "var(--pink-dim)", border: "rgba(255,45,120,0.3)",
-    tag: "BEST VALUE",
-    features: ["Unlimited credits", "All 7 AI tools", "4K image quality", "24/7 support"],
-  },
+  { id: "starter", name: "Starter", price: 99, credits: 500, color: "var(--cyan)", dim: "var(--cyan-dim)", border: "rgba(0,212,255,0.3)", tag: null, features: ["500 credits/month", "All 7 AI tools", "HD image quality", "Email support"] },
+  { id: "pro", name: "Pro", price: 299, credits: 2000, color: "var(--purple)", dim: "var(--purple-dim)", border: "rgba(139,92,246,0.3)", tag: "MOST POPULAR", features: ["2000 credits/month", "All 7 AI tools", "4K image quality", "Priority support"] },
+  { id: "unlimited", name: "Unlimited", price: 599, credits: 99999, color: "var(--pink)", dim: "var(--pink-dim)", border: "rgba(255,45,120,0.3)", tag: "BEST VALUE", features: ["Unlimited credits", "All 7 AI tools", "4K image quality", "24/7 support"] },
 ];
 
 const TOOLS = [
@@ -63,7 +48,7 @@ const CLOUDINARY_PRESET = "RPVISIONAI";
 
 function todayKey() { return new Date().toISOString().split("T")[0]; }
 
-// ================== HELPER FUNCTIONS ==================
+// ================== HELPER FUNCTIONS (keep your original if different) ==================
 async function getOrCreateUser(user) {
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
@@ -134,6 +119,7 @@ async function deleteHistoryItem(docId) {
   }
 }
 
+// Razorpay functions (cleaned)
 function loadRazorpayScript() {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
@@ -219,99 +205,6 @@ function ImageUploader({ file, previewUrl, onFileChange, onClear }) {
   );
 }
 
-// Keep your UpgradeModal and LoginScreen here (paste your original versions if they are different)
-function UpgradeModal({ user, onClose, onSuccess, showToast }) {
-  const [paying, setPaying] = useState(null);
-  const handlePay = async (plan) => {
-    setPaying(plan.id);
-    await initiatePayment(plan, user, (p) => { onSuccess(p); showToast(`🎉 ${p.name} plan activated!`, "success"); onClose(); }, (err) => { showToast(err, "error"); setPaying(null); });
-    setPaying(null);
-  };
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>✕</button>
-        <div className="modal-header">
-          <div className="modal-title">UPGRADE YOUR PLAN</div>
-          <div className="modal-sub">Choose the plan that fits your needs</div>
-        </div>
-        <div className="modal-plans">
-          {PLANS.map(plan => (
-            <div key={plan.id} className={"modal-plan" + (plan.tag === "MOST POPULAR" ? " modal-plan-popular" : "")} style={{ "--pc": plan.color, "--pb": plan.border, "--pd": plan.dim }}>
-              {plan.tag && <div className="plan-tag" style={{ background: plan.color, color: plan.id === "pro" ? "#fff" : "#000" }}>{plan.tag}</div>}
-              <div className="plan-name" style={{ color: plan.color }}>{plan.name}</div>
-              <div className="plan-price">
-                <span className="plan-rs">₹</span>
-                <span className="plan-amount">{plan.price}</span>
-                <span className="plan-period">/month</span>
-              </div>
-              <div className="plan-credits" style={{ color: plan.color }}>
-                {plan.credits === 99999 ? "Unlimited" : plan.credits} credits
-              </div>
-              <div className="plan-features">
-                {plan.features.map((f, i) => (
-                  <div key={i} className="plan-feature">
-                    <span style={{ color: plan.color }}>✓</span> {f}
-                  </div>
-                ))}
-              </div>
-              <button
-                className="plan-btn"
-                style={{ background: plan.color, color: plan.id === "unlimited" ? "#fff" : "#000" }}
-                disabled={paying === plan.id}
-                onClick={() => handlePay(plan)}
-              >
-                {paying === plan.id ? <span className="btn-spin" /> : `Pay ₹${plan.price}`}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoginScreen({ onLogin }) {
-  const [loading, setLoading] = useState(false);
-  const canvasRef = useRef(null);
-  const handleLogin = async () => { setLoading(true); try { await onLogin(); } finally { setLoading(false); } };
-
-  // Your canvas animation code can go here if needed
-  useEffect(() => {
-    // your original canvas code
-  }, []);
-
-  return (
-    <>
-      <style>{`
-        /* Your full login screen CSS here */
-      `}</style>
-      <div className="login-root">
-        <canvas ref={canvasRef} className="login-canvas" />
-        <div className="login-page">
-          <div className="login-left">
-            <div className="logo-container">
-              <div className="logo-glow-ring" /><div className="logo-glow-ring2" />
-              <img src="/logo192.png" alt="RP Vision AI" className="logo-img" />
-            </div>
-            <div className="brand-title">RP VISION AI</div>
-            <div className="brand-sub">Create Without Limits</div>
-          </div>
-          <div className="login-right">
-            <div className="login-card">
-              <div className="card-bg">
-                <button className="google-btn" onClick={handleLogin} disabled={loading}>
-                  {loading ? <div className="btn-spinner" /> : "Continue with Google"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
 // ================== MAIN APP ==================
 export default function App() {
   const [user, setUser] = useState(null);
@@ -343,8 +236,8 @@ export default function App() {
 
   const progressRef = useRef(null);
 
-  // Your existing useEffects, handleFileChange, generate, loadHistory, download, handleUpgradeSuccess etc. go here.
-  // (Keep them exactly as in your original file)
+  // Keep your existing useEffect, handleFileChange, generate, loadHistory, download, handleUpgradeSuccess here.
+  // (I recommend keeping your original generate function as it was, only fixing the fetch line if needed)
 
   // NEW CHAT FUNCTIONS
   const sendChatMessage = async () => {
@@ -383,12 +276,12 @@ export default function App() {
     recognition.start();
   };
 
-  if (authLoading) return <div>Loading RP Vision AI...</div>;
+  if (authLoading) return <div>Loading...</div>;
   if (!user) return <LoginScreen onLogin={handleLogin} />;
 
   return (
     <>
-      {/* Your full <style> block with all CSS - paste your original style here */}
+      {/* Paste your full original <style> block here */}
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -396,7 +289,7 @@ export default function App() {
 
       <div className="app">
         <aside className={"sidebar" + (sidebarOpen ? " open" : "")}>
-          {/* Your original sidebar brand, credits, tools list */}
+          {/* Your original sidebar content */}
 
           <div className="nav-section">
             <div className="nav-label">AI Tools</div>
@@ -408,15 +301,12 @@ export default function App() {
                 <span className="nav-cr">{t.credits}cr</span>
               </div>
             ))}
-            {/* AI Chat Button */}
             <div className={"nav-item" + (view === "chat" ? " active" : "")} onClick={() => { setView("chat"); setSidebarOpen(false); }}>
               <span className="nav-icon">💬</span>
               <span className="nav-lbl">AI Chat Agent</span>
               <span className="nav-cr">Free</span>
             </div>
           </div>
-
-          {/* Your original History and Profile buttons */}
         </aside>
 
         <main className="main">
@@ -436,10 +326,10 @@ export default function App() {
             <div className="progress-fill-bar" style={{ width: progress + "%" }} />
           </div>
 
-          {/* Your original create view */}
+          {/* Your original create view - paste your full workspace here */}
           {view === "create" && (
             <div className="workspace">
-              {/* PASTE YOUR ORIGINAL CONTROLS + CANVAS CODE HERE */}
+              {/* YOUR ORIGINAL CONTROLS + CANVAS CODE HERE */}
             </div>
           )}
 
@@ -452,17 +342,14 @@ export default function App() {
                     <div style={{ textAlign: "center", padding: "80px 20px", opacity: 0.7 }}>
                       <div style={{ fontSize: "60px" }}>💬</div>
                       <div style={{ fontSize: "20px", fontWeight: 600 }}>Free AI Chat Agent</div>
-                      <div style={{ fontSize: "14px", color: "var(--muted2)" }}>Ask anything: Coding, News, Jokes...</div>
                     </div>
-                  ) : (
-                    chatMessages.map((msg, i) => (
-                      <div key={i} style={{ marginBottom: "18px", textAlign: msg.role === "user" ? "right" : "left" }}>
-                        <div style={{ display: "inline-block", maxWidth: "75%", padding: "13px 17px", borderRadius: "16px", background: msg.role === "user" ? "var(--cyan-dim)" : "var(--card2)" }}>
-                          {msg.content}
-                        </div>
+                  ) : chatMessages.map((msg, i) => (
+                    <div key={i} style={{ marginBottom: "18px", textAlign: msg.role === "user" ? "right" : "left" }}>
+                      <div style={{ display: "inline-block", maxWidth: "75%", padding: "13px 17px", borderRadius: "16px", background: msg.role === "user" ? "var(--cyan-dim)" : "var(--card2)" }}>
+                        {msg.content}
                       </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                   {chatLoading && <div>Thinking...</div>}
                 </div>
 
@@ -484,9 +371,9 @@ export default function App() {
             </div>
           )}
 
-          {/* Your original history and profile views */}
-          {view === "history" && (/* your original history code */)}
-          {view === "profile" && (/* your original profile code */)}
+          {/* Your original history and profile */}
+          {view === "history" && (/* your original history */)}
+          {view === "profile" && (/* your original profile */)}
         </main>
       </div>
     </>
