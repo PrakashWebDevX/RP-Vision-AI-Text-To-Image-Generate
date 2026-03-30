@@ -298,14 +298,13 @@ app.post("/verify-payment", async (req, res) => {
 // ═══════════════════════════════════════════════════════
 // 10. AI CHAT AGENT (ChatGPT + Claude Sonnet + Gemini) - FREE
 // ═══════════════════════════════════════════════════════
+// AI CHAT AGENT
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages, model = "claude" } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "Messages array is required" });
     }
-
-    console.log(`AI Chat - Model: ${model}, Messages: ${messages.length}`);
 
     const POLLINATIONS_URL = "https://gen.pollinations.ai/v1/chat/completions";
 
@@ -320,10 +319,7 @@ app.post("/api/chat", async (req, res) => {
       }),
     });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      throw new Error(`Pollinations error ${response.status}: ${errText}`);
-    }
+    if (!response.ok) throw new Error(`Pollinations error ${response.status}`);
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "Sorry, I couldn't generate a response.";
