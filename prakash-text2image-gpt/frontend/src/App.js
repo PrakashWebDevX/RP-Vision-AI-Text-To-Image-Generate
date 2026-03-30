@@ -68,7 +68,16 @@ async function getOrCreateUser(user) {
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    await setDoc(ref, { uid: user.uid, email: user.email, name: user.displayName, photo: user.photoURL, plan: "free", planCredits: 0, createdAt: serverTimestamp(), credits: { date: todayKey(), used: 0 } });
+    await setDoc(ref, {
+      uid: user.uid,
+      email: user.email,
+      name: user.displayName,
+      photo: user.photoURL,
+      plan: "free",
+      planCredits: 0,
+      createdAt: serverTimestamp(),
+      credits: { date: todayKey(), used: 0 }
+    });
     return { plan: "free", planCredits: 0, credits: { date: todayKey(), used: 0 } };
   }
   return snap.data();
@@ -98,7 +107,10 @@ async function uploadToCloudinary(blob) {
     fd.append("file", blob);
     fd.append("upload_preset", CLOUDINARY_PRESET);
     fd.append("folder", "rp-vision-ai");
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: "POST", body: fd });
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+      method: "POST",
+      body: fd
+    });
     const data = await res.json();
     return data.secure_url || null;
   } catch (err) {
@@ -134,7 +146,7 @@ async function deleteHistoryItem(docId) {
   }
 }
 
-// Razorpay functions
+// Razorpay
 function loadRazorpayScript() {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
@@ -224,9 +236,7 @@ function ImageUploader({ file, previewUrl, onFileChange, onClear }) {
   );
 }
 
-// Keep your UpgradeModal and LoginScreen as they were (or paste them here if needed)
-// For brevity, I'm assuming they are working. If not, let me know.
-
+// ================== MAIN APP ==================
 export default function App() {
   const [user, setUser] = useState(null);
   const [userPlan, setUserPlan] = useState("free");
@@ -249,7 +259,7 @@ export default function App() {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
-  // NEW: Chat States
+  // Chat States
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [selectedChatModel, setSelectedChatModel] = useState("claude");
@@ -257,7 +267,6 @@ export default function App() {
 
   const progressRef = useRef(null);
 
-  // Existing useEffects and functions (generate, etc.) stay the same
   useEffect(() => {
     if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
     setInputFile(null);
@@ -266,14 +275,197 @@ export default function App() {
     setError(null);
   }, [activeTool.id]);
 
-  // ... keep all your other existing code (handleFileChange, generate, loadHistory, download, etc.)
+  const handleFileChange = (file) => {
+    if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+    setInputFile(file);
+    setInputPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleFileClear = () => {
+    if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+    setInputFile(null);
+    setInputPreviewUrl(null);
+  };
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        const data = await getOrCreateUser(u);
+        setUser(u);
+        setUserPlan(data.plan || "free");
+        setPlanCredits(data.planCredits || 0);
+        const today = todayKey();
+        setCreditsUsed(data.credits?.date === today ? data.credits.used : 0);
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleLogin = async () => {
+    const res = await signInWithPopup(auth, provider);
+    await getOrCreateUser(res.user);
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setResult(null);
+    setHistory([]);
+  };
+
+  const startProgress = () => {
+    setProgress(0);
+    let p = 0;
+    progressRef.current = setInterval(() => {
+      p += Math.random() * 3;
+      if (p >= 90) {
+        clearInterval(progressRef.current);
+        p = 90;
+      }
+      setProgress(p);
+    }, 300);
+  };
+
+  const stopProgress = () => {
+    clearInterval(progressRef.current);
+    setProgress(100);
+    setTimeout(() => setProgress(0), 600);
+  };
+
+  const showToast = (msg, type = "info") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const creditsLeft = userPlan === "unlimited" ? 9999 : userPlan !== "free" ? planCredits : FREE_CREDITS_PER_DAY - creditsUsed;
+
+  // ================== GENERATE FUNCTION (FIXED) ==================
+  const generate = useCallback(async () => {
+    if (loading) return;
+    const needsFile = ["image-to-image", "remove-bg", "upscale", "image-to-video"].includes(activeTool.id);
+    const needsPrompt = !["upscale", "remove-bg", "image-to-video"].includes(activeTool.id);
+    const promptOptional = ["image-to-video"].includes(activeTool.id);
+
+    if (needsPrompt && !promptOptional && !prompt.trim()) {
+      showToast("Please enter a prompt!", "error");
+      return;
+    }
+    if (needsFile && !inputFile) {
+      showToast("Please upload an image first!", "error");
+      return;
+    }
+    if (creditsLeft < activeTool.credits) {
+      setShowUpgrade(true);
+      return;
+    }
+
+    setError(null);
+    setResult(null);
+    setLoading(true);
+    startProgress();
+
+    const ok = await checkAndDeductCredits(user.uid, activeTool.credits, userPlan);
+    if (!ok) {
+      setLoading(false);
+      stopProgress();
+      setShowUpgrade(true);
+      return;
+    }
+
+    if (userPlan !== "free" && userPlan !== "unlimited") setPlanCredits(c => c - activeTool.credits);
+    else setCreditsUsed(c => c + activeTool.credits);
+
+    try {
+      const styleTag = style !== null ? STYLES[style].tag : "";
+      const fullPrompt = [prompt.trim(), styleTag].filter(Boolean).join(", ");
+
+      let endpoint = activeTool.id;
+      if (activeTool.id === "remove-bg") endpoint = "remove-background";
+
+      let fetchOptions = {};
+      if (needsFile && inputFile) {
+        const fd = new FormData();
+        fd.append("image", inputFile);
+        if (activeTool.id === "image-to-image" || activeTool.id === "image-to-video") fd.append("prompt", fullPrompt);
+        fetchOptions = { method: "POST", body: fd };
+      } else {
+        fetchOptions = {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: fullPrompt })
+        };
+      }
+
+      const res = await fetch(`${BACKEND}/${endpoint}`, fetchOptions);
+
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || `Generation failed (${res.status})`);
+      }
+
+      if (activeTool.id === "text-to-audio") {
+        const data = await res.json();
+        const text = data.text || prompt;
+        if (!window.speechSynthesis) throw new Error("Browser doesn't support speech.");
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+        setResult({ type: "audio", text, utterance });
+        await saveToHistory(user.uid, activeTool.id, "", prompt);
+        showToast("Audio generated!", "success");
+      } else {
+        const blob = await res.blob();
+        const localUrl = URL.createObjectURL(blob);
+        setResult({ type: "image", url: localUrl });
+        const cloudUrl = await uploadToCloudinary(blob);
+        await saveToHistory(user.uid, activeTool.id, cloudUrl || localUrl, prompt);
+        showToast("Generated successfully!", "success");
+      }
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, "error");
+    } finally {
+      stopProgress();
+      setLoading(false);
+    }
+  }, [prompt, style, activeTool, inputFile, loading, creditsLeft, user, userPlan]);
+
+  const loadHistory = useCallback(async () => {
+    if (!user) return;
+    setHistoryLoading(true);
+    try {
+      setHistory(await fetchHistory(user.uid));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (view === "history" && user) loadHistory();
+  }, [view, user, loadHistory]);
+
+  const download = (url, ext = "png") => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rp-vision-${Date.now()}.${ext}`;
+    a.click();
+  };
+
+  const handleUpgradeSuccess = (plan) => {
+    setUserPlan(plan.id);
+    setPlanCredits(plan.credits === 99999 ? 99999 : plan.credits);
+  };
 
   // NEW CHAT FUNCTIONS
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
     const userMsg = { role: "user", content: chatInput.trim() };
     setChatMessages(prev => [...prev, userMsg]);
-    const tempInput = chatInput.trim();
     setChatInput("");
     setChatLoading(true);
 
@@ -291,7 +483,7 @@ export default function App() {
         setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
       }
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: "assistant", content: "Sorry, chat is busy. Try again." }]);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Chat service busy. Try again." }]);
     } finally {
       setChatLoading(false);
     }
@@ -300,7 +492,7 @@ export default function App() {
   const startVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      showToast("Voice input not supported in this browser", "error");
+      showToast("Voice input not supported", "error");
       return;
     }
     const recognition = new SpeechRecognition();
@@ -309,30 +501,43 @@ export default function App() {
     recognition.start();
   };
 
-  if (authLoading) {
-    return <div>Loading...</div>; // Replace with your splash screen if needed
-  }
-
-  if (!user) {
-    return <LoginScreen onLogin={() => signInWithPopup(auth, provider)} />;
-  }
+  if (authLoading) return <div style={{ padding: "40px", textAlign: "center" }}>Loading RP Vision AI...</div>;
+  if (!user) return <LoginScreen onLogin={handleLogin} />;
 
   const needsImageInput = ["image-to-image", "image-to-video", "upscale", "remove-bg"].includes(activeTool.id);
 
   return (
     <>
       <style>{`
-        /* Paste your full CSS here from original App.js */
-        /* I recommend keeping your original <style> block as it was */
+        /* Paste your full original CSS here if needed */
+        /* For now using minimal - add your full style block if you want exact look */
       `}</style>
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
-      {showUpgrade && <UpgradeModal user={user} onClose={() => setShowUpgrade(false)} onSuccess={(p) => { setUserPlan(p.id); setPlanCredits(p.credits); }} showToast={showToast} />}
+      {showUpgrade && <UpgradeModal user={user} onClose={() => setShowUpgrade(false)} onSuccess={handleUpgradeSuccess} showToast={showToast} />}
 
       <div className="app">
         <aside className={"sidebar" + (sidebarOpen ? " open" : "")}>
-          {/* Brand and Credits - keep as is */}
+          {/* Brand */}
+          <div className="sidebar-brand">
+            <img src="/logo192.png" alt="RP Vision AI" className="brand-logo" />
+            <span className="brand-name">RP VISION AI</span>
+            <span className="brand-v">V2</span>
+          </div>
+
+          {/* Credits Bar */}
+          <div className="credits-bar">
+            <div className="credits-row">
+              <span className="credits-label">{userPlan === "free" ? "Daily Credits" : "Plan Credits"}</span>
+              <span className="credits-count">{userPlan === "unlimited" ? "∞" : creditsLeft} {userPlan === "free" ? `/ ${FREE_CREDITS_PER_DAY}` : ""}</span>
+            </div>
+            {userPlan !== "unlimited" && (
+              <div className="credits-track">
+                <div className="credits-fill" style={{ width: userPlan === "free" ? (creditsLeft / FREE_CREDITS_PER_DAY * 100) + "%" : Math.min((creditsLeft / 2000) * 100, 100) + "%" }} />
+              </div>
+            )}
+          </div>
 
           <div className="nav-section">
             <div className="nav-label">AI Tools</div>
@@ -344,7 +549,8 @@ export default function App() {
                 <span className="nav-cr">{t.credits}cr</span>
               </div>
             ))}
-            {/* AI Chat Button */}
+
+            {/* AI Chat */}
             <div className={"nav-item" + (view === "chat" ? " active" : "")}
               onClick={() => { setView("chat"); setSidebarOpen(false); }}>
               <span className="nav-icon">💬</span>
@@ -353,18 +559,47 @@ export default function App() {
             </div>
           </div>
 
-          {/* History and Profile buttons - keep your original */}
+          <div className="sidebar-views">
+            <div className={"view-btn" + (view === "history" ? " active" : "")} onClick={() => { setView("history"); setSidebarOpen(false); }}>
+              <span className="view-icon">◫</span><span className="view-lbl">History</span>
+            </div>
+            <div className={"view-btn" + (view === "profile" ? " active" : "")} onClick={() => { setView("profile"); setSidebarOpen(false); }}>
+              <span className="view-icon">◯</span><span className="view-lbl">Profile</span>
+            </div>
+          </div>
+
+          {userPlan === "free" && (
+            <div className="upgrade-card" onClick={() => setShowUpgrade(true)}>
+              <div className="upgrade-title">⬡ Upgrade to Pro</div>
+              <div className="upgrade-sub">Get more credits & unlock all features</div>
+            </div>
+          )}
+
+          <div className="sidebar-user">
+            <img className="user-avatar" src={user.photoURL} alt="" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="user-name">{user.displayName}</div>
+              <div className="user-plan">{userPlan.toUpperCase()} PLAN</div>
+            </div>
+            <button className="logout-btn" onClick={handleLogout}>Out</button>
+          </div>
         </aside>
 
         <main className="main">
+          <div className="mobile-topbar">
+            <button className="hamburger" onClick={() => setSidebarOpen(true)}>☰</button>
+            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 3, background: "linear-gradient(135deg,#00d4ff,#8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>RP VISION AI</span>
+            <span style={{ fontSize: 11, color: "var(--muted2)" }}>{userPlan === "unlimited" ? "∞" : creditsLeft}cr</span>
+          </div>
+
           <div className="main-topbar">
             <div>
               <div className="topbar-title">{view === "chat" ? "💬 AI Chat Agent" : activeTool.label}</div>
-              <div className="topbar-desc">{view === "chat" ? "Ask anything - Coding, Questions, News, Jokes..." : activeTool.desc}</div>
+              <div className="topbar-desc">{view === "chat" ? "Ask anything — Coding, Questions, News, Jokes..." : activeTool.desc}</div>
             </div>
             {view === "chat" && (
               <select value={selectedChatModel} onChange={(e) => setSelectedChatModel(e.target.value)}
-                style={{ padding: "8px 12px", borderRadius: "8px", background: "var(--card)", color: "var(--text)" }}>
+                style={{ padding: "8px 12px", borderRadius: "8px", background: "var(--card)", border: "1px solid var(--border)", color: "var(--text)" }}>
                 {CHAT_MODELS.map(m => (
                   <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
                 ))}
@@ -376,32 +611,59 @@ export default function App() {
             <div className="progress-fill-bar" style={{ width: progress + "%" }} />
           </div>
 
-          {/* Your Original Create View */}
+          {/* CREATE VIEW - YOUR ORIGINAL */}
           {view === "create" && (
             <div className="workspace">
-              {/* Paste your original controls + canvas code here */}
-              {/* From <div className="controls"> to the end of canvas */}
+              <div className="controls">
+                {/* Paste your original controls content here if needed */}
+                {!["upscale", "remove-bg"].includes(activeTool.id) && (
+                  <div className="ctrl-section">
+                    <div className="ctrl-lbl">Prompt</div>
+                    <div className="prompt-wrap">
+                      <textarea value={prompt} onChange={e => setPrompt(e.target.value.slice(0, 500))}
+                        placeholder="Describe what you want to create..." rows={4} />
+                      <span className="char-count">{prompt.length}/500</span>
+                    </div>
+                  </div>
+                )}
+                {/* ... rest of your controls ... */}
+                <button className="gen-btn" disabled={loading} onClick={generate}>
+                  {loading ? <>Generating...</> : <><span>{activeTool.icon} Generate</span><span className="gen-btn-credits">{activeTool.credits} cr</span></>}
+                </button>
+              </div>
+              <div className="canvas">
+                {/* Your canvas content */}
+                {!loading && !result && !error && (
+                  <div className="empty-state">
+                    <div className="empty-icon">{activeTool.icon}</div>
+                    <div className="empty-title">{activeTool.label}</div>
+                  </div>
+                )}
+                {/* result display etc. */}
+              </div>
             </div>
           )}
 
-          {/* NEW AI CHAT VIEW */}
+          {/* CHAT VIEW */}
           {view === "chat" && (
             <div className="workspace" style={{ flexDirection: "column", overflow: "hidden" }}>
               <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column" }}>
                 <div style={{ flex: 1, overflowY: "auto", background: "var(--card)", borderRadius: "16px", padding: "20px", marginBottom: "16px" }}>
                   {chatMessages.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.6 }}>
-                      <div style={{ fontSize: "48px" }}>💬</div>
-                      <div style={{ fontSize: "18px", marginTop: "10px" }}>Free AI Chat Agent</div>
-                      <div style={{ fontSize: "14px", color: "var(--muted2)" }}>Ask anything: Coding, News, Jokes, General Questions...</div>
+                    <div style={{ textAlign: "center", padding: "80px 20px", opacity: 0.7 }}>
+                      <div style={{ fontSize: "60px" }}>💬</div>
+                      <div style={{ fontSize: "20px", fontWeight: 600 }}>Free AI Chat Agent</div>
+                      <div style={{ fontSize: "14px", color: "var(--muted2)", marginTop: "12px" }}>
+                        Ask anything: Coding (HTML, CSS, JS, Python), General Questions, News, Jokes...
+                      </div>
                     </div>
                   ) : (
                     chatMessages.map((msg, i) => (
-                      <div key={i} style={{ marginBottom: "16px", textAlign: msg.role === "user" ? "right" : "left" }}>
+                      <div key={i} style={{ marginBottom: "18px", textAlign: msg.role === "user" ? "right" : "left" }}>
                         <div style={{
                           display: "inline-block",
-                          maxWidth: "80%",
-                          padding: "12px 16px",
+                          maxWidth: "75%",
+                          padding: "13px 17px",
                           borderRadius: "16px",
                           background: msg.role === "user" ? "var(--cyan-dim)" : "var(--card2)"
                         }}>
@@ -410,20 +672,20 @@ export default function App() {
                       </div>
                     ))
                   )}
-                  {chatLoading && <div>Thinking...</div>}
+                  {chatLoading && <div style={{ padding: "12px", color: "var(--muted2)" }}>Thinking...</div>}
                 </div>
 
                 <div style={{ display: "flex", gap: "10px" }}>
                   <input
                     value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && sendChatMessage()}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyPress={e => e.key === "Enter" && sendChatMessage()}
                     placeholder="Ask anything..."
-                    style={{ flex: 1, padding: "14px", borderRadius: "12px", background: "var(--card)" }}
+                    style={{ flex: 1, padding: "14px 18px", borderRadius: "12px", background: "var(--card)", border: "1px solid var(--border2)" }}
                   />
-                  <button onClick={startVoiceInput} style={{ padding: "14px", borderRadius: "12px", background: "#8b5cf6", color: "white" }}>🎤</button>
+                  <button onClick={startVoiceInput} style={{ padding: "14px 18px", borderRadius: "12px", background: "var(--purple-dim)", border: "none", fontSize: "20px" }}>🎤</button>
                   <button onClick={sendChatMessage} disabled={!chatInput.trim() || chatLoading}
-                    style={{ padding: "14px 24px", borderRadius: "12px", background: "linear-gradient(var(--cyan), var(--purple))", color: "white" }}>
+                    style={{ padding: "14px 28px", borderRadius: "12px", background: "linear-gradient(135deg, var(--cyan), var(--purple))", color: "#fff", border: "none" }}>
                     Send
                   </button>
                 </div>
@@ -431,9 +693,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Your original History and Profile views */}
-          {view === "history" && (/* your history code */)}
-          {view === "profile" && (/* your profile code */)}
+          {/* History and Profile - add your original code here if needed */}
         </main>
       </div>
     </>
