@@ -1,38 +1,285 @@
-.App {
-  text-align: center;
+/* ── Windows 2000 Classic Theme ── */
+
+* {
+  box-sizing: border-box;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+body {
+  margin: 0;
+  font-family: 'Tahoma', 'MS Sans Serif', 'Arial', sans-serif;
+  font-size: 11px;
+  background: #008080; /* Classic Win2k teal desktop */
+  color: #000000;
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+/* ── Win2000 Beveled 3D Borders ── */
+.win2k-raised {
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #404040;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.win2k-inset {
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #dfdfdf;
+}
+
+.win2k-sunken {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+
+.win2k-button {
+  background: #d4d0c8;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: inset 1px 1px 0 #ececec, inset -1px -1px 0 #808080;
+  font-family: 'Tahoma', 'MS Sans Serif', Arial, sans-serif;
+  font-size: 11px;
+  color: #000000;
+  cursor: pointer;
+  padding: 3px 10px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.win2k-button:active {
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ececec;
+  padding: 4px 9px 2px 11px;
+}
+
+.win2k-button:disabled {
+  color: #808080;
+  text-shadow: 1px 1px 0 #ffffff;
+  cursor: not-allowed;
+}
+
+.win2k-input {
+  background: #ffffff;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  box-shadow: inset 1px 1px 0 #404040;
+  font-family: 'Tahoma', 'MS Sans Serif', Arial, sans-serif;
+  font-size: 11px;
+  color: #000000;
+  padding: 3px 4px;
+  outline: none;
+  resize: none;
+}
+
+.win2k-input::placeholder {
+  color: #808080;
+}
+
+/* Title Bar */
+.win2k-titlebar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 3px 4px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.win2k-titlebar-btn {
+  width: 16px;
+  height: 14px;
+  background: #d4d0c8;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  border-right: 1px solid #404040;
+  border-bottom: 1px solid #404040;
+  font-size: 9px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  cursor: pointer;
+  font-family: 'Marlett', 'Arial', sans-serif;
+  padding: 0;
+  color: #000000;
+  flex-shrink: 0;
 }
 
-.App-link {
-  color: #61dafb;
+/* Menu Bar */
+.win2k-menubar {
+  background: #d4d0c8;
+  border-bottom: 1px solid #808080;
+  display: flex;
+  align-items: center;
+  padding: 2px 2px;
+  flex-shrink: 0;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.win2k-menubar-item {
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #000000;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.win2k-menubar-item:hover {
+  background: #000080;
+  color: #ffffff;
+  border-color: #000080;
+}
+
+/* Toolbar */
+.win2k-toolbar {
+  background: #d4d0c8;
+  border-bottom: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.win2k-toolbar-sep {
+  width: 2px;
+  height: 22px;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #ffffff;
+  margin: 0 2px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #d4d0c8;
+  border: 1px solid #808080;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d0c8;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+}
+
+::-webkit-scrollbar-button {
+  background: #d4d0c8;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Statusbar */
+.win2k-statusbar {
+  background: #d4d0c8;
+  border-top: 1px solid #808080;
+  padding: 2px 6px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.win2k-statusbar-panel {
+  border-top: 1px solid #808080;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #ffffff;
+  border-bottom: 1px solid #ffffff;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+/* GroupBox */
+.win2k-groupbox {
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 14px 8px 8px 8px;
+  position: relative;
+  margin: 6px 0;
+}
+
+.win2k-groupbox-label {
+  position: absolute;
+  top: -7px;
+  left: 8px;
+  background: #d4d0c8;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+/* Selection highlight */
+.win2k-selected {
+  background: #000080 !important;
+  color: #ffffff !important;
+}
+
+/* Dotted focus border */
+.win2k-focus:focus {
+  outline: 1px dotted #000000;
+  outline-offset: -2px;
+}
+
+/* ── Animations ── */
+@keyframes win2k-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes win2k-dots {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+/* ── App Window ── */
+.app-window {
+  background: #d4d0c8;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Code blocks in Win2k style */
+.win2k-code {
+  background: #ffffff;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  padding: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: #000080;
+  margin: 6px 0;
 }
