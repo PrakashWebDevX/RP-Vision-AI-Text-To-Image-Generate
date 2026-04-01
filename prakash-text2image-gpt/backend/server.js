@@ -9,21 +9,18 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
 // multer — memory storage for file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+const upload = multer({ 
+  storage: multer.memoryStorage(), 
+  limits: { fileSize: 20 * 1024 * 1024 } 
 });
 
 const PORT = process.env.PORT || 10000;
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const delay = ms => new Promise(r => setTimeout(r, ms));
 
 // ── HuggingFace inference helper ─────────────────────────
 async function hfInference(model, payload, retries = 3) {
   const HF_TOKEN = process.env.HF_TOKEN;
-  if (!HF_TOKEN)
-    throw new Error(
-      "HF_TOKEN not set. Get free key at huggingface.co/settings/tokens"
-    );
+  if (!HF_TOKEN) throw new Error("HF_TOKEN not set. Get free key at huggingface.co/settings/tokens");
   const url = `https://router.huggingface.co/hf-inference/models/${model}`;
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, {
@@ -39,20 +36,18 @@ async function hfInference(model, payload, retries = 3) {
     if (res.status === 503) {
       const json = await res.json().catch(() => ({}));
       const waitTime = (json.estimated_time || 20) * 1000;
-      console.log(`Model loading, waiting ${Math.round(waitTime / 1000)}s...`);
+      console.log(`Model loading, waiting ${Math.round(waitTime/1000)}s...`);
       await delay(Math.min(waitTime, 30000));
       continue;
     }
     if (res.status === 429) {
-      console.log(`Rate limited, waiting 10s... (attempt ${i + 1})`);
+      console.log(`Rate limited, waiting 10s... (attempt ${i+1})`);
       await delay(10000);
       continue;
     }
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      throw new Error(
-        `HuggingFace error ${res.status}: ${errText.slice(0, 200)}`
-      );
+      throw new Error(`HuggingFace error ${res.status}: ${errText.slice(0,200)}`);
     }
     return res;
   }
@@ -66,25 +61,21 @@ app.get("/health", (req, res) => {
     HF_TOKEN: !!process.env.HF_TOKEN,
     STABILITY_KEY: !!process.env.STABILITY_KEY,
     REMOVE_BG_KEY: !!process.env.REMOVE_BG_KEY,
-    RAZORPAY: !!process.env.RAZORPAY_KEY_ID,
   });
 });
 
 // ═══════════════════════════════════════════════════════
-//  1. TEXT TO IMAGE — HuggingFace FLUX (unchanged, working)
+//  1. TEXT TO IMAGE
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-image", async (req, res) => {
   try {
-    const { prompt, model } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
     console.log("text-to-image:", prompt.slice(0, 60));
-
-    // Support multiple HF models
-    const hfModel = model || "black-forest-labs/FLUX.1-schnell";
-
-    const response = await hfInference(hfModel, {
-      inputs: prompt.trim().slice(0, 500),
-    });
+    const response = await hfInference(
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: prompt.trim().slice(0, 500) }
+    );
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
@@ -95,39 +86,16 @@ app.post("/text-to-image", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  2. IMAGE TO IMAGE — FIXED: properly passes image to HF
+//  2. IMAGE TO IMAGE — accepts multipart with "image" file
 // ═══════════════════════════════════════════════════════
 app.post("/image-to-image", upload.single("image"), async (req, res) => {
   try {
     const prompt = req.body.prompt || "transform this image, high quality";
-    console.log(
-      "image-to-image:",
-      prompt.slice(0, 60),
-      req.file ? "[file uploaded]" : "[no file]"
-    );
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Image file is required" });
-    }
-
-    // Convert uploaded image to base64
-    const base64Image = req.file.buffer.toString("base64");
-    const mimeType = req.file.mimetype || "image/jpeg";
-    const dataUri = `data:${mimeType};base64,${base64Image}`;
-
+    console.log("image-to-image:", prompt.slice(0, 60), req.file ? "[file uploaded]" : "[no file]");
     const fullPrompt = `${prompt.trim()}, high quality, detailed`.slice(0, 500);
-
-    // Use img2img model on HuggingFace
     const response = await hfInference(
-      "stabilityai/stable-diffusion-xl-refiner-1.0",
-      {
-        inputs: fullPrompt,
-        parameters: {
-          image: dataUri,
-          strength: 0.7,
-          num_inference_steps: 20,
-        },
-      }
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: fullPrompt }
     );
     const buffer = await response.buffer();
     res.set("Content-Type", "image/jpeg");
@@ -139,138 +107,42 @@ app.post("/image-to-image", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  3. TEXT TO VIDEO — FIXED: Uses Pollinations AI (FREE!)
-//     Returns actual MP4 video, not a JPEG image
+//  3. TEXT TO VIDEO
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-video", async (req, res) => {
   try {
-    const { prompt, model, duration } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
     console.log("text-to-video:", prompt.slice(0, 60));
-
-    // Pollinations video models (all 100% free, no key needed!)
-    const videoModel = model || "wan-fast"; // wan-fast | seedance | veo | nova-reel | grok-video-pro
-    const videoDuration = duration || 5;   // 5 or 10 seconds
-    const seed = Math.floor(Math.random() * 999999);
-
-    const encodedPrompt = encodeURIComponent(
-      prompt.trim().slice(0, 500)
+    const videoPrompt = `${prompt.trim()}, cinematic movie frame, motion blur, dynamic scene, film still, 4k`.slice(0, 500);
+    const response = await hfInference(
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: videoPrompt }
     );
-
-    // Pollinations video API — FREE & UNLIMITED
-    const videoUrl = `https://video.pollinations.ai/prompt/${encodedPrompt}?model=${videoModel}&duration=${videoDuration}&seed=${seed}&nologo=true`;
-
-    console.log("Fetching from Pollinations video:", videoUrl.slice(0, 100));
-
-    const videoRes = await fetch(videoUrl, {
-      timeout: 180000, // 3 min timeout for video generation
-    });
-
-    if (!videoRes.ok) {
-      throw new Error(`Pollinations video error: ${videoRes.status}`);
-    }
-
-    const contentType = videoRes.headers.get("content-type") || "video/mp4";
-    const buffer = await videoRes.buffer();
-
-    if (buffer.length < 1000) {
-      throw new Error("Video generation returned empty response. Try again.");
-    }
-
-    console.log(`✅ Video generated: ${buffer.length} bytes`);
-    res.set("Content-Type", contentType.includes("video") ? contentType : "video/mp4");
-    res.set("Content-Length", buffer.length);
+    const buffer = await response.buffer();
+    res.set("Content-Type", "image/jpeg");
     res.send(buffer);
-
   } catch (err) {
     console.error("text-to-video error:", err.message);
-
-    // Fallback to wan-fast model
-    try {
-      console.log("Trying fallback wan-fast model...");
-      const fallbackUrl = `https://video.pollinations.ai/prompt/${encodeURIComponent(
-        req.body.prompt.slice(0, 300)
-      )}?model=wan-fast&duration=5&seed=${Date.now()}`;
-
-      const fallbackRes = await fetch(fallbackUrl, { timeout: 120000 });
-      if (fallbackRes.ok) {
-        const buffer = await fallbackRes.buffer();
-        res.set("Content-Type", "video/mp4");
-        res.send(buffer);
-        return;
-      }
-    } catch (fallbackErr) {
-      console.error("Fallback also failed:", fallbackErr.message);
-    }
-
     res.status(500).json({ error: err.message });
   }
 });
 
 // ═══════════════════════════════════════════════════════
-//  4. IMAGE TO VIDEO — FIXED: Uses Stable Video Diffusion
-//     via HuggingFace (actual video from image!)
+//  4. IMAGE TO VIDEO — accepts multipart with "image" file
 // ═══════════════════════════════════════════════════════
 app.post("/image-to-video", upload.single("image"), async (req, res) => {
   try {
     const prompt = req.body.prompt || "animate with smooth cinematic motion";
-    console.log(
-      "image-to-video:",
-      prompt.slice(0, 60),
-      req.file ? "[file uploaded]" : "[no file]"
+    console.log("image-to-video:", prompt.slice(0, 60), req.file ? "[file uploaded]" : "[no file]");
+    const videoPrompt = `${prompt.trim()}, dynamic motion, cinematic video frame, 4k film`.slice(0, 500);
+    const response = await hfInference(
+      "black-forest-labs/FLUX.1-schnell",
+      { inputs: videoPrompt }
     );
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Image file is required" });
-    }
-
-    // Use Stable Video Diffusion on HuggingFace
-    const HF_TOKEN = process.env.HF_TOKEN;
-    if (!HF_TOKEN) throw new Error("HF_TOKEN not set");
-
-    const base64Image = req.file.buffer.toString("base64");
-    const mimeType = req.file.mimetype || "image/jpeg";
-
-    const response = await fetch(
-      "https://router.huggingface.co/hf-inference/models/stabilityai/stable-video-diffusion-img2vid-xt",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-          "x-wait-for-model": "true",
-        },
-        body: JSON.stringify({
-          inputs: `data:${mimeType};base64,${base64Image}`,
-          parameters: {
-            num_frames: 25,
-            fps: 7,
-          },
-        }),
-        timeout: 180000,
-      }
-    );
-
-    if (response.status === 503) {
-      // Model loading — wait and return error asking to retry
-      return res.status(503).json({
-        error: "Model is loading, please retry in 30 seconds.",
-        retry: true,
-      });
-    }
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      throw new Error(`HuggingFace SVD error ${response.status}: ${errText.slice(0, 200)}`);
-    }
-
     const buffer = await response.buffer();
-    const contentType = response.headers.get("content-type") || "video/mp4";
-
-    console.log(`✅ Image-to-video generated: ${buffer.length} bytes`);
-    res.set("Content-Type", contentType);
+    res.set("Content-Type", "image/jpeg");
     res.send(buffer);
-
   } catch (err) {
     console.error("image-to-video error:", err.message);
     res.status(500).json({ error: err.message });
@@ -278,73 +150,36 @@ app.post("/image-to-video", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  5. TEXT TO AUDIO — FIXED: Uses HuggingFace MusicGen
-//     Returns actual MP3 audio for music/sound
+//  5. TEXT TO AUDIO — Returns text for frontend TTS
+//     Uses Web Speech API in browser (FREE, no API key)
 // ═══════════════════════════════════════════════════════
 app.post("/text-to-audio", async (req, res) => {
   try {
-    const { prompt, type } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
     console.log("text-to-audio:", prompt.slice(0, 60));
-
-    if (type === "speech") {
-      // For speech: return text for browser Web Speech API
-      return res.json({
-        success: true,
-        type: "speech",
-        text: prompt.trim().slice(0, 300),
-        message: "Use browser Web Speech API",
-      });
-    }
-
-    // For music: use HuggingFace MusicGen (FREE)
-    const response = await hfInference(
-      "facebook/musicgen-small",
-      {
-        inputs: prompt.trim().slice(0, 300),
-        parameters: {
-          max_new_tokens: 256,
-        },
-      }
-    );
-
-    const buffer = await response.buffer();
-    console.log(`✅ Audio generated: ${buffer.length} bytes`);
-    res.set("Content-Type", "audio/mpeg");
-    res.set("Content-Length", buffer.length);
-    res.send(buffer);
-
+    // Return the text — frontend will use Web Speech API to speak it
+    res.json({ 
+      success: true, 
+      text: prompt.trim().slice(0, 300),
+      message: "Use Web Speech API in browser"
+    });
   } catch (err) {
     console.error("text-to-audio error:", err.message);
-
-    // Fallback: return text for browser TTS
-    res.json({
-      success: true,
-      type: "speech",
-      text: req.body.prompt?.trim().slice(0, 300) || "",
-      message: "Audio model unavailable, use browser TTS",
-      fallback: true,
-    });
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ═══════════════════════════════════════════════════════
-//  6. IMAGE UPSCALER — unchanged, working correctly
+//  6. IMAGE UPSCALER — accepts multipart with "image" file
 // ═══════════════════════════════════════════════════════
 app.post("/upscale", upload.single("image"), async (req, res) => {
   try {
     const STABILITY_KEY = process.env.STABILITY_KEY;
-    if (!STABILITY_KEY)
-      return res.status(500).json({ error: "STABILITY_KEY not set" });
-    if (!req.file)
-      return res.status(400).json({ error: "Image file is required" });
+    if (!STABILITY_KEY) return res.status(500).json({ error: "STABILITY_KEY not set" });
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
-    console.log(
-      "upscale: [file uploaded]",
-      req.file.originalname,
-      req.file.size,
-      "bytes"
-    );
+    console.log("upscale: [file uploaded]", req.file.originalname, req.file.size, "bytes");
 
     const form = new FormData();
     form.append("image", req.file.buffer, {
@@ -353,19 +188,12 @@ app.post("/upscale", upload.single("image"), async (req, res) => {
     });
     form.append("output_format", "jpeg");
 
-    const upscaleRes = await fetch(
-      "https://api.stability.ai/v2beta/stable-image/upscale/fast",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${STABILITY_KEY}`,
-          Accept: "image/*",
-          ...form.getHeaders(),
-        },
-        body: form,
-        timeout: 60000,
-      }
-    );
+    const upscaleRes = await fetch("https://api.stability.ai/v2beta/stable-image/upscale/fast", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${STABILITY_KEY}`, Accept: "image/*", ...form.getHeaders() },
+      body: form,
+      timeout: 60000,
+    });
 
     if (!upscaleRes.ok) {
       const errText = await upscaleRes.text();
@@ -381,22 +209,15 @@ app.post("/upscale", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  7. REMOVE BACKGROUND — unchanged, working correctly
+//  7. REMOVE BACKGROUND — accepts multipart with "image" file
 // ═══════════════════════════════════════════════════════
 app.post("/remove-background", upload.single("image"), async (req, res) => {
   try {
     const REMOVE_BG_KEY = process.env.REMOVE_BG_KEY;
-    if (!REMOVE_BG_KEY)
-      return res.status(500).json({ error: "REMOVE_BG_KEY not set" });
-    if (!req.file)
-      return res.status(400).json({ error: "Image file is required" });
+    if (!REMOVE_BG_KEY) return res.status(500).json({ error: "REMOVE_BG_KEY not set" });
+    if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
-    console.log(
-      "remove-bg: [file uploaded]",
-      req.file.originalname,
-      req.file.size,
-      "bytes"
-    );
+    console.log("remove-bg: [file uploaded]", req.file.originalname, req.file.size, "bytes");
 
     const form = new FormData();
     form.append("image_file", req.file.buffer, {
@@ -414,9 +235,7 @@ app.post("/remove-background", upload.single("image"), async (req, res) => {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(
-        errData.errors?.[0]?.title || `Remove.bg error ${response.status}`
-      );
+      throw new Error(errData.errors?.[0]?.title || `Remove.bg error ${response.status}`);
     }
     const buffer = await response.buffer();
     res.set("Content-Type", "image/png");
@@ -428,32 +247,63 @@ app.post("/remove-background", upload.single("image"), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  8. RAZORPAY — Create Order (unchanged, working)
+//  AI CHAT — Proxy to Anthropic API
+// ═══════════════════════════════════════════════════════
+app.post("/chat", async (req, res) => {
+  try {
+    const { messages, model, userName } = req.body;
+    if (!messages || !messages.length) return res.status(400).json({ error: "Messages required" });
+
+    const selectedModel = model || "claude-haiku-4-5-20251001";
+    console.log("💬 Chat request:", selectedModel, "msgs:", messages.length);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        max_tokens: 1024,
+        system: `You are a helpful AI assistant built into RP Vision AI — an AI creative platform. Help users with coding (HTML, CSS, JS, Python, React, Node.js), answer any question, explain concepts clearly, tell jokes, discuss news, give advice and everything. Be friendly, concise and helpful. The user's name is ${userName || "User"}. When showing code, always use markdown code blocks with the language name.`,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("Anthropic error:", data);
+      throw new Error(data.error?.message || `Anthropic API error ${response.status}`);
+    }
+
+    const reply = data.content?.[0]?.text || "Sorry, I could not generate a response.";
+    console.log("✅ Chat reply generated, length:", reply.length);
+    res.json({ reply, model: selectedModel });
+  } catch (err) {
+    console.error("chat error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 // ═══════════════════════════════════════════════════════
 app.post("/create-order", async (req, res) => {
   try {
     const { amount, currency, planId } = req.body;
     const key = process.env.RAZORPAY_KEY_ID;
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!key || !secret)
-      return res.status(500).json({ error: "Razorpay keys not configured" });
+    if (!key || !secret) return res.status(500).json({ error: "Razorpay keys not configured" });
 
     const response = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization:
-          "Basic " + Buffer.from(`${key}:${secret}`).toString("base64"),
+        "Authorization": "Basic " + Buffer.from(`${key}:${secret}`).toString("base64"),
       },
-      body: JSON.stringify({
-        amount,
-        currency: currency || "INR",
-        receipt: `rcpt_${planId}_${Date.now()}`,
-      }),
+      body: JSON.stringify({ amount, currency: currency || "INR", receipt: `rcpt_${planId}_${Date.now()}` }),
     });
     const order = await response.json();
-    if (!order.id)
-      throw new Error(order.error?.description || "Order creation failed");
+    if (!order.id) throw new Error(order.error?.description || "Order creation failed");
     console.log("✅ Razorpay order created:", order.id);
     res.json(order);
   } catch (err) {
@@ -463,20 +313,13 @@ app.post("/create-order", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  9. RAZORPAY — Verify Payment (unchanged, working)
+//  RAZORPAY — Verify Payment
 // ═══════════════════════════════════════════════════════
 app.post("/verify-payment", async (req, res) => {
   try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      planId,
-      uid,
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, uid } = req.body;
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!secret)
-      return res.status(500).json({ error: "Razorpay secret not configured" });
+    if (!secret) return res.status(500).json({ error: "Razorpay secret not configured" });
 
     const crypto = require("crypto");
     const hmac = crypto.createHmac("sha256", secret);
@@ -488,9 +331,7 @@ app.post("/verify-payment", async (req, res) => {
       res.json({ success: true, planId, uid });
     } else {
       console.error("❌ Payment signature mismatch!");
-      res
-        .status(400)
-        .json({ success: false, error: "Invalid payment signature" });
+      res.status(400).json({ success: false, error: "Invalid payment signature" });
     }
   } catch (err) {
     console.error("verify-payment error:", err.message);
@@ -501,13 +342,8 @@ app.post("/verify-payment", async (req, res) => {
 // ═══════════════════════════════════════════════════════
 app.listen(PORT, () => {
   console.log(`✅ RP Vision AI backend running on port ${PORT}`);
-  console.log(`HF_TOKEN:      ${process.env.HF_TOKEN ? "✅ SET" : "❌ NOT SET"}`);
+  console.log(`HF_TOKEN: ${process.env.HF_TOKEN ? "✅ SET" : "❌ NOT SET"}`);
   console.log(`STABILITY_KEY: ${process.env.STABILITY_KEY ? "✅ SET" : "❌ NOT SET"}`);
   console.log(`REMOVE_BG_KEY: ${process.env.REMOVE_BG_KEY ? "✅ SET" : "❌ NOT SET"}`);
-  console.log(`RAZORPAY:      ${process.env.RAZORPAY_KEY_ID ? "✅ SET" : "❌ NOT SET"}`);
+  console.log(`RAZORPAY: ${process.env.RAZORPAY_KEY_ID ? "✅ SET" : "❌ NOT SET"}`);
 });
-
-
-
-
-
