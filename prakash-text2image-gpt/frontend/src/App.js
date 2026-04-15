@@ -42,7 +42,7 @@ export default function AIChat({ userName = "User" }) {
   const [model, setModel]           = useState(MODELS[0]);
   const [showModels, setShowModels] = useState(false);
   const [copied, setCopied]         = useState(null);
-  const [error, setError]           = useState(null);
+  const [, setError]                = useState(null);   // ✅ FIX: 'error' was unused; destructure only setter
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
