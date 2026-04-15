@@ -1,3 +1,20 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useRef, useEffect } from "react";
 
@@ -42,7 +59,7 @@ export default function AIChat({ userName = "User" }) {
   const [model, setModel]           = useState(MODELS[0]);
   const [showModels, setShowModels] = useState(false);
   const [copied, setCopied]         = useState(null);
-  const [, setError]                = useState(null);   // ✅ FIX: 'error' was unused; destructure only setter
+  const [error, setError]           = useState(null);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
@@ -299,3 +316,5 @@ export default function AIChat({ userName = "User" }) {
     </div>
   );
 }
+
+
