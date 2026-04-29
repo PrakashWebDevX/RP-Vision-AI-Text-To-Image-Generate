@@ -141,18 +141,21 @@ export default function AIChat({ userName = "User" }) {
     );
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+// AFTER (correct — uses backend proxy like App.js does)
+    const BACKEND = "https://rp-vision-backend.onrender.com";
+
+    const res = await fetch(`${BACKEND}/chat`, {
+       method: "POST",
+       headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({
           model: model.id,
-          max_tokens: 1024,
-          system: `You are a helpful AI assistant built into RP Vision AI — an AI creative platform. Help users with coding (HTML,CSS,JS,Python,React,Node), answer any question, explain concepts clearly, tell jokes, discuss news, give advice and everything else. Be friendly, concise and helpful. The user's name is ${userName}. When showing code, always use markdown code blocks.`,
           messages: newMsgs.map((m) => ({ role: m.role, content: m.content })),
+          userName,
         }),
       });
       const data  = await res.json();
-      const reply = data.content?.[0]?.text || "Sorry, something went wrong. Please try again!";
+      if (!res.ok) throw new Error(data.error || "Chat failed");
+      const reply = data.reply || "Sorry, something went wrong. Please try again!";
       const aiMsg = { role: "assistant", content: reply };
       const final = [...newMsgs, aiMsg];
       setMsgs(final);
