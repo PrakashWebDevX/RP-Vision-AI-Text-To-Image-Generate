@@ -76,7 +76,7 @@ app.post("/text-to-image", async (req, res) => {
       "black-forest-labs/FLUX.1-schnell",
       { inputs: prompt.trim().slice(0, 500) }
     );
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
@@ -97,7 +97,7 @@ app.post("/image-to-image", upload.single("image"), async (req, res) => {
       "black-forest-labs/FLUX.1-schnell",
       { inputs: fullPrompt }
     );
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
@@ -119,7 +119,7 @@ app.post("/text-to-video", async (req, res) => {
       "black-forest-labs/FLUX.1-schnell",
       { inputs: videoPrompt }
     );
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
@@ -140,7 +140,7 @@ app.post("/image-to-video", upload.single("image"), async (req, res) => {
       "black-forest-labs/FLUX.1-schnell",
       { inputs: videoPrompt }
     );
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
@@ -199,7 +199,7 @@ app.post("/upscale", upload.single("image"), async (req, res) => {
       const errText = await upscaleRes.text();
       throw new Error(`Stability AI error: ${errText.slice(0, 200)}`);
     }
-    const buffer = await upscaleRes.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/jpeg");
     res.send(buffer);
   } catch (err) {
@@ -237,7 +237,7 @@ app.post("/remove-background", upload.single("image"), async (req, res) => {
       const errData = await response.json().catch(() => ({}));
       throw new Error(errData.errors?.[0]?.title || `Remove.bg error ${response.status}`);
     }
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", "image/png");
     res.send(buffer);
   } catch (err) {
