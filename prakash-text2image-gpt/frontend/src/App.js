@@ -1,37 +1,57 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useRef, useEffect } from "react";
+import "./App.css";
 
 const BACKEND = "https://rp-vision-backend.onrender.com";
 
 const MODELS = [
-  { id:"claude-sonnet-4-20250514",  name:"Claude Sonnet 4",  icon:"🟣", color:"#8b5cf6", badge:"Smart"  },
-  { id:"claude-haiku-4-5-20251001", name:"Claude Haiku 4.5", icon:"🔵", color:"#00d4ff", badge:"Fast"   },
+  { id:"claude-sonnet-4-20250514",  name:"Claude Sonnet 4",  icon:"[S]", color:"#000080", badge:"Smart"  },
+  { id:"claude-haiku-4-5-20251001", name:"Claude Haiku 4.5", icon:"[H]", color:"#000080", badge:"Fast"   },
 ];
 
 const QUICK = [
-  { icon:"💻", text:"Write a Python function to reverse a string" },
-  { icon:"🎨", text:"Write HTML + CSS for a beautiful card component" },
-  { icon:"⚛️",  text:"Explain React useState and useEffect with example" },
-  { icon:"🚀", text:"Give me 5 profitable SaaS ideas for 2026" },
-  { icon:"🐛", text:"How do I fix CORS error in Express.js?" },
-  { icon:"😂", text:"Tell me a funny programming joke" },
-  { icon:"📰", text:"What are the latest trends in AI?" },
-  { icon:"🎯", text:"How to center a div in CSS — all methods" },
+  { icon:"[>]", text:"Write a Python function to reverse a string" },
+  { icon:"[>]", text:"Write HTML + CSS for a beautiful card component" },
+  { icon:"[>]", text:"Explain React useState and useEffect with example" },
+  { icon:"[>]", text:"Give me 5 profitable SaaS ideas for 2026" },
+  { icon:"[>]", text:"How do I fix CORS error in Express.js?" },
+  { icon:"[>]", text:"Tell me a funny programming joke" },
+  { icon:"[>]", text:"What are the latest trends in AI?" },
+  { icon:"[>]", text:"How to center a div in CSS — all methods" },
 ];
 
 function formatText(text) {
   return text
     .replace(/```(\w*)\n?([\s\S]*?)```/g,
-      '<pre style="background:#060612;border:1px solid rgba(139,92,246,0.25);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12px;line-height:1.7;margin:10px 0;font-family:monospace;color:#c4b5fd;white-space:pre-wrap"><code>$2</code></pre>')
+      '<pre class="win2k-code">$2</pre>')
     .replace(/`([^`]+)`/g,
-      '<code style="background:rgba(139,92,246,0.12);color:#a78bfa;padding:2px 7px;border-radius:5px;font-size:12px;font-family:monospace">$1</code>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#eeeef5;font-weight:600">$1</strong>')
-    .replace(/^### (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:#eeeef5;margin:12px 0 4px">$1</div>')
-    .replace(/^## (.+)$/gm,  '<div style="font-size:15px;font-weight:700;color:#eeeef5;margin:14px 0 6px">$1</div>')
-    .replace(/^- (.+)$/gm,   '<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#8b5cf6;flex-shrink:0">•</span><span>$1</span></div>')
-    .replace(/^\d+\. (.+)$/gm,'<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#00d4ff;flex-shrink:0;font-weight:600">›</span><span>$1</span></div>')
+      '<code style="font-family:Courier New,monospace;font-size:11px;background:#f0f0f0;border:1px solid #808080;padding:0 3px;color:#000080">$1</code>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^### (.+)$/gm, '<div style="font-size:11px;font-weight:bold;margin:8px 0 3px;text-decoration:underline">$1</div>')
+    .replace(/^## (.+)$/gm,  '<div style="font-size:12px;font-weight:bold;margin:10px 0 4px;text-decoration:underline">$1</div>')
+    .replace(/^- (.+)$/gm,   '<div style="display:flex;gap:6px;margin:2px 0"><span style="flex-shrink:0">•</span><span>$1</span></div>')
+    .replace(/^\d+\. (.+)$/gm,'<div style="display:flex;gap:6px;margin:2px 0"><span style="flex-shrink:0;font-weight:bold">›</span><span>$1</span></div>')
     .replace(/\n/g, '<br/>');
 }
+
+/* ── Bevel helpers ── */
+const R = {
+  background:"#d4d0c8",
+  borderTop:"2px solid #ffffff",
+  borderLeft:"2px solid #ffffff",
+  borderRight:"2px solid #404040",
+  borderBottom:"2px solid #404040",
+  boxShadow:"inset 1px 1px 0 #ececec,inset -1px -1px 0 #808080",
+};
+
+const INSET = {
+  background:"#ffffff",
+  borderTop:"2px solid #808080",
+  borderLeft:"2px solid #808080",
+  borderRight:"2px solid #ffffff",
+  borderBottom:"2px solid #ffffff",
+  boxShadow:"inset 1px 1px 0 #404040",
+};
 
 export default function AIChat({ userName = "User" }) {
   const [sessions, setSessions]     = useState([{ id:1, title:"New Chat", msgs:[] }]);
@@ -43,10 +63,15 @@ export default function AIChat({ userName = "User" }) {
   const [showModels, setShowModels] = useState(false);
   const [copied, setCopied]         = useState(null);
   const [error, setError]           = useState(null);
+  const [time, setTime]             = useState(new Date());
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, loading]);
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const newChat = () => {
     const id = Date.now();
@@ -84,20 +109,17 @@ export default function AIChat({ userName = "User" }) {
     if (!q || loading) return;
     setInput("");
     setError(null);
-
     const userMsg  = { role:"user", content:q };
     const newMsgs  = [...msgs, userMsg];
     setMsgs(newMsgs);
     setLoading(true);
-
     setSessions(p => p.map(s => s.id === activeId
       ? { ...s, title: s.msgs.length === 0 ? q.slice(0,28)+"…" : s.title, msgs:newMsgs }
       : s));
-
     try {
       const res = await fetch(`${BACKEND}/chat`, {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           messages: newMsgs.map(m => ({ role:m.role, content:m.content })),
           model: model.id,
@@ -112,7 +134,7 @@ export default function AIChat({ userName = "User" }) {
       setSessions(p => p.map(s => s.id === activeId ? { ...s, msgs:final } : s));
     } catch(err) {
       setError(err.message);
-      const errMsg = { role:"assistant", content:`⚠️ ${err.message}\n\nPlease try again.` };
+      const errMsg = { role:"assistant", content:`ERROR: ${err.message}\n\nPlease try again.` };
       setMsgs(p => [...p, errMsg]);
     } finally { setLoading(false); inputRef.current?.focus(); }
   };
@@ -123,178 +145,347 @@ export default function AIChat({ userName = "User" }) {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const timeStr = time.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+
   return (
-    <div style={{flex:1,display:"flex",height:"100%",overflow:"hidden",fontFamily:"'DM Sans',sans-serif"}}>
+    <div className="app-window" style={{ fontFamily:"Tahoma,'MS Sans Serif',Arial,sans-serif" }}>
 
-      {/* ── Sessions Sidebar ── */}
-      <div style={{width:230,display:"flex",flexDirection:"column",borderRight:"1px solid rgba(255,255,255,0.05)",background:"#07070f",flexShrink:0}}>
-
-        {/* New Chat */}
-        <div style={{padding:"12px 10px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-          <button onClick={newChat} style={{width:"100%",padding:"10px 0",background:"linear-gradient(135deg,#00d4ff,#8b5cf6)",border:"none",borderRadius:10,color:"#000",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:0.5,transition:"opacity .2s"}}
-            onMouseEnter={e=>e.currentTarget.style.opacity="0.88"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-            ＋ New Chat
-          </button>
-        </div>
-
-        {/* Model Picker */}
-        <div style={{padding:"10px 10px 8px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-          <div style={{fontSize:9,color:"#44445a",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>AI Model</div>
-          <div style={{position:"relative"}}>
-            <button onClick={()=>setShowModels(p=>!p)} style={{width:"100%",background:"#0d0d1a",border:"1px solid rgba(255,255,255,0.08)",borderRadius:9,padding:"9px 10px",color:"#eeeef5",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontFamily:"'DM Sans',sans-serif",transition:"border-color .2s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(139,92,246,0.4)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,0.08)"}>
-              <span style={{fontSize:16}}>{model.icon}</span>
-              <span style={{flex:1,textAlign:"left",fontWeight:500}}>{model.name}</span>
-              <span style={{fontSize:9,background:model.color+"22",color:model.color,padding:"2px 7px",borderRadius:100,border:`1px solid ${model.color}44`,fontWeight:600}}>{model.badge}</span>
-              <span style={{color:"#44445a",fontSize:10}}>{showModels?"▴":"▾"}</span>
-            </button>
-            {showModels && (
-              <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#0d0d1a",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,overflow:"hidden",zIndex:99,boxShadow:"0 12px 32px rgba(0,0,0,0.7)"}}>
-                {MODELS.map(m=>(
-                  <div key={m.id} onClick={()=>{setModel(m);setShowModels(false);}}
-                    style={{padding:"11px 12px",cursor:"pointer",display:"flex",gap:10,alignItems:"center",background:model.id===m.id?"rgba(139,92,246,0.1)":"transparent",borderBottom:"1px solid rgba(255,255,255,0.04)",transition:"background .15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="rgba(139,92,246,0.08)"}
-                    onMouseLeave={e=>e.currentTarget.style.background=model.id===m.id?"rgba(139,92,246,0.1)":"transparent"}>
-                    <span style={{fontSize:20}}>{m.icon}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"#eeeef5"}}>{m.name}</div>
-                      <div style={{fontSize:10,color:"#7777a0"}}>{m.badge} · Free</div>
-                    </div>
-                    {model.id===m.id && <span style={{color:m.color,fontSize:14}}>✓</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sessions */}
-        <div style={{flex:1,overflowY:"auto",padding:"8px 6px",scrollbarWidth:"none"}}>
-          <div style={{fontSize:9,color:"#44445a",letterSpacing:2,textTransform:"uppercase",padding:"0 6px",marginBottom:6}}>Chats</div>
-          {[...sessions].reverse().map(s=>(
-            <div key={s.id} onClick={()=>switchChat(s.id)}
-              style={{padding:"9px 10px",borderRadius:9,cursor:"pointer",marginBottom:3,display:"flex",alignItems:"center",gap:8,background:s.id===activeId?"rgba(0,212,255,0.06)":"transparent",border:s.id===activeId?"1px solid rgba(0,212,255,0.15)":"1px solid transparent",transition:"all .15s"}}
-              onMouseEnter={e=>{if(s.id!==activeId)e.currentTarget.style.background="rgba(255,255,255,0.03)";}}
-              onMouseLeave={e=>{if(s.id!==activeId)e.currentTarget.style.background="transparent";}}>
-              <span style={{fontSize:12,color:s.id===activeId?"#00d4ff":"#44445a",flexShrink:0}}>◈</span>
-              <span style={{fontSize:12,color:s.id===activeId?"#eeeef5":"#7777a0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</span>
-              <button onClick={(e)=>deleteChat(s.id,e)}
-                style={{background:"none",border:"none",color:"#e74c3c",fontSize:11,cursor:"pointer",opacity:0,padding:"2px 4px",borderRadius:4,transition:"opacity .15s",flexShrink:0}}
-                onMouseEnter={e=>{e.target.style.opacity=1;e.target.style.background="rgba(231,76,60,0.15)";}}
-                onMouseLeave={e=>{e.target.style.opacity=0;e.target.style.background="none";}}>✕</button>
-            </div>
-          ))}
+      {/* ── TITLE BAR ── */}
+      <div className="win2k-titlebar">
+        {/* App icon */}
+        <div style={{width:16,height:16,background:"#ffff00",border:"1px solid #000080",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:"bold",flexShrink:0,color:"#000080"}}>AI</div>
+        <span style={{flex:1,fontSize:11,fontWeight:"bold"}}>RP Vision AI Assistant — [{model.name}]</span>
+        <div style={{display:"flex",gap:2}}>
+          <div className="win2k-titlebar-btn" title="Minimize">_</div>
+          <div className="win2k-titlebar-btn" title="Maximize">□</div>
+          <div className="win2k-titlebar-btn" title="Close" style={{fontWeight:"bold"}}>✕</div>
         </div>
       </div>
 
-      {/* ── Main Chat ── */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+      {/* ── MENU BAR ── */}
+      <div className="win2k-menubar">
+        {["File","Edit","View","Chat","Model","Help"].map(m => (
+          <div key={m} className="win2k-menubar-item">{m}</div>
+        ))}
+      </div>
 
-        {/* Header */}
-        <div style={{padding:"14px 24px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(7,7,15,0.9)",backdropFilter:"blur(12px)",flexShrink:0}}>
-          <div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,background:"linear-gradient(135deg,#00d4ff,#8b5cf6,#ff2d78)",backgroundSize:"200%",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI ASSISTANT</div>
-            <div style={{fontSize:11,color:"#7777a0",marginTop:1}}>{model.icon} {model.name} · Ask me anything — coding, questions, jokes & more!</div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"#0d0d1a",border:"1px solid rgba(255,255,255,0.08)",padding:"5px 12px",borderRadius:100}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:loading?"#e8c14a":"#2ecc71",boxShadow:`0 0 8px ${loading?"#e8c14a":"#2ecc71"}`,transition:"all .3s"}}/>
-            <span style={{fontSize:11,color:"#7777a0"}}>{loading?"Thinking...":"Online · Free"}</span>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div style={{flex:1,overflowY:"auto",padding:"24px",display:"flex",flexDirection:"column",gap:18,scrollbarWidth:"none"}}>
-
-          {msgs.length===0 && (
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:24,paddingTop:10,maxWidth:680,margin:"0 auto",width:"100%"}}>
-              <div style={{textAlign:"center"}}>
-                <div style={{width:80,height:80,borderRadius:"50%",background:"linear-gradient(135deg,rgba(0,212,255,0.1),rgba(139,92,246,0.15))",border:"2px solid rgba(139,92,246,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px"}}>◈</div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:4,color:"#eeeef5"}}>HOW CAN I HELP YOU?</div>
-                <div style={{fontSize:13,color:"#7777a0",marginTop:8,lineHeight:1.8}}>Ask me coding questions, get explanations, jokes, startup ideas,<br/>news, general questions — everything!</div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,width:"100%"}}>
-                {QUICK.map((q,i)=>(
-                  <button key={i} onClick={()=>send(q.text)}
-                    style={{background:"#0d0d1a",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"12px 14px",color:"#7777a0",fontSize:12.5,cursor:"pointer",textAlign:"left",transition:"all .2s",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5,display:"flex",gap:10,alignItems:"flex-start"}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(139,92,246,0.35)";e.currentTarget.style.color="#eeeef5";e.currentTarget.style.background="rgba(139,92,246,0.06)";}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.06)";e.currentTarget.style.color="#7777a0";e.currentTarget.style.background="#0d0d1a";}}>
-                    <span style={{fontSize:16,flexShrink:0}}>{q.icon}</span>
-                    <span>{q.text}</span>
-                  </button>
-                ))}
-              </div>
+      {/* ── TOOLBAR ── */}
+      <div className="win2k-toolbar">
+        <button className="win2k-button" onClick={newChat} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>📄</span> New Chat
+        </button>
+        <div className="win2k-toolbar-sep"/>
+        <button className="win2k-button" style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>💾</span> Save
+        </button>
+        <button className="win2k-button" style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>🖨️</span> Print
+        </button>
+        <div className="win2k-toolbar-sep"/>
+        <button className="win2k-button" style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>✂️</span> Cut
+        </button>
+        <button className="win2k-button" style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>📋</span> Copy
+        </button>
+        <button className="win2k-button" style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px"}}>
+          <span style={{fontSize:12,lineHeight:1}}>📌</span> Paste
+        </button>
+        <div className="win2k-toolbar-sep"/>
+        {/* Model selector in toolbar */}
+        <span style={{fontSize:11,marginRight:4}}>Model:</span>
+        <div style={{position:"relative"}}>
+          <button className="win2k-button" onClick={()=>setShowModels(p=>!p)} style={{display:"flex",alignItems:"center",gap:6,minWidth:160}}>
+            <span style={{flex:1,textAlign:"left"}}>{model.name}</span>
+            <span style={{fontSize:8}}>{showModels?"▲":"▼"}</span>
+          </button>
+          {showModels && (
+            <div style={{position:"absolute",top:"calc(100% + 1px)",left:0,background:"#d4d0c8",zIndex:999,...R,minWidth:180}}>
+              {MODELS.map(m => (
+                <div key={m.id} onClick={()=>{ setModel(m); setShowModels(false); }}
+                  style={{padding:"4px 12px",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",gap:8,
+                    background:model.id===m.id?"#000080":"transparent",
+                    color:model.id===m.id?"#ffffff":"#000000"}}
+                  onMouseEnter={e=>{ if(model.id!==m.id){ e.currentTarget.style.background="#000080"; e.currentTarget.style.color="#ffffff"; }}}
+                  onMouseLeave={e=>{ if(model.id!==m.id){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#000000"; }}}>
+                  {model.id===m.id && <span style={{width:12,flexShrink:0}}>✓</span>}
+                  {model.id!==m.id && <span style={{width:12,flexShrink:0}}></span>}
+                  <span>{m.name}</span>
+                  <span style={{marginLeft:"auto",fontSize:9,background:"#d4d0c8",color:"#000080",border:"1px solid #808080",padding:"0 4px"}}>{m.badge}</span>
+                </div>
+              ))}
             </div>
           )}
-
-          {msgs.map((m,i)=>(
-            <div key={i} style={{display:"flex",gap:12,flexDirection:m.role==="user"?"row-reverse":"row",alignItems:"flex-start",maxWidth:"82%",alignSelf:m.role==="user"?"flex-end":"flex-start"}}>
-              <div style={{width:36,height:36,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:m.role==="user"?13:20,fontWeight:700,
-                background:m.role==="user"?"linear-gradient(135deg,#00d4ff,#8b5cf6)":"linear-gradient(135deg,rgba(139,92,246,0.15),rgba(255,45,120,0.1))",
-                border:m.role==="user"?"none":"1px solid rgba(139,92,246,0.25)",color:m.role==="user"?"#000":"#8b5cf6"}}>
-                {m.role==="user"?"U":model.icon}
-              </div>
-              <div style={{padding:"13px 16px",
-                borderRadius:m.role==="user"?"16px 4px 16px 16px":"4px 16px 16px 16px",
-                background:m.role==="user"?"linear-gradient(135deg,rgba(0,212,255,0.1),rgba(139,92,246,0.1))":"#0d0d1a",
-                border:m.role==="user"?"1px solid rgba(0,212,255,0.18)":"1px solid rgba(255,255,255,0.06)",
-                fontSize:13.5,lineHeight:1.75,color:"#eeeef5",wordBreak:"break-word"}}>
-                <div dangerouslySetInnerHTML={{__html:formatText(m.content)}}/>
-                {m.role==="assistant" && (
-                  <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",gap:12}}>
-                    <button onClick={()=>copy(m.content,i)}
-                      style={{background:"none",border:"none",color:copied===i?"#2ecc71":"#44445a",fontSize:11,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4,transition:"color .2s"}}
-                      onMouseEnter={e=>{if(copied!==i)e.currentTarget.style.color="#7777a0";}}
-                      onMouseLeave={e=>{if(copied!==i)e.currentTarget.style.color="#44445a";}}>
-                      {copied===i?"✓ Copied!":"⎘ Copy"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {loading && (
-            <div style={{display:"flex",gap:12,alignItems:"flex-start",alignSelf:"flex-start"}}>
-              <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,rgba(139,92,246,0.15),rgba(255,45,120,0.1))",border:"1px solid rgba(139,92,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{model.icon}</div>
-              <div style={{background:"#0d0d1a",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"4px 16px 16px 16px",padding:"14px 18px",display:"flex",gap:5,alignItems:"center"}}>
-                {[0,150,300].map((d,i)=>(
-                  <div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#8b5cf6",animationName:"dotBounce",animationDuration:"1.2s",animationDelay:`${d}ms`,animationIterationCount:"infinite",animationTimingFunction:"ease-in-out"}}/>
-                ))}
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef}/>
         </div>
+        <div className="win2k-toolbar-sep"/>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:4}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:loading?"#ff8c00":"#00aa00",border:"1px solid #404040"}}/>
+          <span style={{fontSize:11,color:"#444444"}}>{loading?"Processing...":"Online"}</span>
+        </div>
+      </div>
 
-        {/* Input */}
-        <div style={{padding:"14px 20px 16px",borderTop:"1px solid rgba(255,255,255,0.05)",background:"rgba(7,7,15,0.95)",flexShrink:0}}>
-          <div style={{display:"flex",gap:10,alignItems:"flex-end",background:"#0d0d1a",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"12px 14px",transition:"border-color .2s"}}
-            onFocus={e=>e.currentTarget.style.borderColor="rgba(139,92,246,0.35)"}
-            onBlur={e=>e.currentTarget.style.borderColor="rgba(255,255,255,0.08)"}>
-            <textarea ref={inputRef} value={input}
-              onChange={e=>{ setInput(e.target.value); e.target.style.height="auto"; e.target.style.height=Math.min(e.target.scrollHeight,130)+"px"; }}
-              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}
-              placeholder="Ask anything — code, jokes, questions, news... (Enter to send)"
-              style={{flex:1,background:"none",border:"none",color:"#eeeef5",fontSize:13.5,resize:"none",outline:"none",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6,height:22,maxHeight:130,overflowY:"auto",padding:0,scrollbarWidth:"none"}}
-            />
-            <button onClick={()=>send()} disabled={loading||!input.trim()}
-              style={{width:40,height:40,borderRadius:11,border:"none",cursor:input.trim()&&!loading?"pointer":"not-allowed",background:input.trim()&&!loading?"linear-gradient(135deg,#00d4ff,#8b5cf6)":"rgba(255,255,255,0.05)",color:input.trim()&&!loading?"#000":"#44445a",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s"}}>
-              {loading?"⏳":"↑"}
+      {/* ── MAIN CONTENT ── */}
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+        {/* ── LEFT PANEL: Sessions ── */}
+        <div style={{width:200,display:"flex",flexDirection:"column",background:"#d4d0c8",borderRight:"2px solid #808080",flexShrink:0}}>
+
+          {/* Panel title */}
+          <div style={{background:"linear-gradient(90deg,#000080,#1084d0)",color:"#ffffff",padding:"3px 6px",fontSize:11,fontWeight:"bold",flexShrink:0}}>
+            Chat History
+          </div>
+
+          {/* Sessions list */}
+          <div style={{flex:1,overflowY:"auto",padding:"4px 2px"}}>
+            {[...sessions].reverse().map(s => (
+              <div key={s.id} onClick={()=>switchChat(s.id)}
+                style={{
+                  padding:"3px 6px",cursor:"pointer",marginBottom:1,
+                  display:"flex",alignItems:"center",gap:4,
+                  background:s.id===activeId?"#000080":"transparent",
+                  color:s.id===activeId?"#ffffff":"#000000",
+                  fontSize:11,
+                }}
+                onMouseEnter={e=>{ if(s.id!==activeId){ e.currentTarget.style.background="#0000dd"; e.currentTarget.style.color="#ffffff"; }}}
+                onMouseLeave={e=>{ if(s.id!==activeId){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#000000"; }}}>
+                <span style={{fontSize:10,flexShrink:0}}>💬</span>
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:11}}>{s.title}</span>
+                <button onClick={(e)=>deleteChat(s.id,e)}
+                  style={{background:"none",border:"none",color:"inherit",fontSize:10,cursor:"pointer",padding:"1px 3px",flexShrink:0,lineHeight:1}}
+                  title="Delete">✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Actions */}
+          <div style={{padding:"4px",borderTop:"2px solid #808080",flexShrink:0}}>
+            <button className="win2k-button" onClick={newChat} style={{width:"100%",padding:"4px 0",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              📄 New Chat
             </button>
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",marginTop:8,padding:"0 2px"}}>
-            <span style={{fontSize:10,color:"#44445a"}}>Enter to send · Shift+Enter for new line</span>
-            <span style={{fontSize:10,color:"#44445a"}}>Powered by <span style={{color:model.color,fontWeight:600}}>{model.name}</span> · Free ✓</span>
+        </div>
+
+        {/* ── CHAT PANEL ── */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0,background:"#d4d0c8"}}>
+
+          {/* Address bar */}
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderBottom:"2px solid #808080",background:"#d4d0c8",flexShrink:0}}>
+            <span style={{fontSize:11,flexShrink:0}}>Address:</span>
+            <div style={{flex:1,...INSET,padding:"2px 4px",fontSize:11,color:"#000080"}}>
+              rpvision://ai-assistant/{model.id}
+            </div>
+            <button className="win2k-button" style={{padding:"2px 10px",fontSize:11}}>Go</button>
           </div>
+
+          {/* Messages Area */}
+          <div style={{flex:1,overflowY:"auto",padding:"8px",display:"flex",flexDirection:"column",gap:8,background:"#ffffff",...INSET}}>
+
+            {msgs.length===0 && (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,paddingTop:20,maxWidth:600,margin:"0 auto",width:"100%"}}>
+
+                {/* Welcome dialog-style box */}
+                <div style={{...R,width:"100%",maxWidth:520}}>
+                  <div style={{background:"linear-gradient(90deg,#000080,#1084d0)",color:"#ffffff",padding:"3px 6px",fontSize:11,fontWeight:"bold",display:"flex",alignItems:"center",gap:6,marginBottom:0}}>
+                    <div style={{width:14,height:14,background:"#ffff00",border:"1px solid #000",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:"bold",color:"#000080",flexShrink:0}}>?</div>
+                    Welcome to RP Vision AI Assistant
+                  </div>
+                  <div style={{padding:"14px 16px",background:"#d4d0c8",fontSize:11,lineHeight:1.8}}>
+                    <p style={{margin:"0 0 10px",fontWeight:"bold"}}>How can I help you today?</p>
+                    <p style={{margin:0,color:"#444444"}}>Ask me about coding, get explanations, startup ideas, jokes, latest news, and much more. Select a quick prompt below or type your question.</p>
+                  </div>
+                </div>
+
+                {/* Quick prompts as a list box */}
+                <div style={{...R,width:"100%",maxWidth:520}}>
+                  <div style={{background:"linear-gradient(90deg,#000080,#1084d0)",color:"#ffffff",padding:"3px 6px",fontSize:11,fontWeight:"bold",marginBottom:0}}>
+                    Quick Prompts
+                  </div>
+                  <div style={{padding:"4px",...INSET,background:"#ffffff",display:"grid",gridTemplateColumns:"1fr 1fr",gap:2}}>
+                    {QUICK.map((q,i)=>(
+                      <div key={i} onClick={()=>send(q.text)}
+                        style={{padding:"4px 8px",cursor:"pointer",fontSize:11,display:"flex",alignItems:"flex-start",gap:6,
+                          borderBottom:"1px solid #f0f0f0"}}
+                        onMouseEnter={e=>{ e.currentTarget.style.background="#000080"; e.currentTarget.style.color="#ffffff"; }}
+                        onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#000000"; }}>
+                        <span style={{flexShrink:0,marginTop:1}}>▶</span>
+                        <span style={{lineHeight:1.4}}>{q.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Error banner */}
+            {error && (
+              <div style={{background:"#ffffff",...R,padding:"6px 10px",display:"flex",alignItems:"center",gap:8,fontSize:11,flexShrink:0}}>
+                <span style={{fontSize:16}}>⚠️</span>
+                <strong>Error:</strong> {error}
+              </div>
+            )}
+
+            {/* Messages */}
+            {msgs.map((m,i)=>(
+              <div key={i} style={{display:"flex",gap:8,flexDirection:m.role==="user"?"row-reverse":"row",alignItems:"flex-start",maxWidth:"88%",alignSelf:m.role==="user"?"flex-end":"flex-start"}}>
+                {/* Avatar */}
+                <div style={{
+                  width:32,height:32,flexShrink:0,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:10,fontWeight:"bold",...R,
+                  background:m.role==="user"?"#d4d0c8":"#d4d0c8",
+                  color:"#000080",
+                  borderRadius:0,
+                }}>
+                  {m.role==="user"?"USR":"BOT"}
+                </div>
+                {/* Bubble */}
+                <div style={{
+                  padding:"6px 10px",
+                  background:m.role==="user"?"#ffffc0":"#ffffff",
+                  fontSize:11,lineHeight:1.6,color:"#000000",
+                  ...(m.role==="user"?{
+                    borderTop:"2px solid #ffffff",
+                    borderLeft:"2px solid #ffffff",
+                    borderRight:"2px solid #404040",
+                    borderBottom:"2px solid #404040",
+                  }:{
+                    borderTop:"2px solid #808080",
+                    borderLeft:"2px solid #808080",
+                    borderRight:"2px solid #ffffff",
+                    borderBottom:"2px solid #ffffff",
+                  }),
+                  wordBreak:"break-word",maxWidth:"100%",
+                }}>
+                  <div style={{marginBottom:4,fontSize:9,color:"#808080",display:"flex",justifyContent:"space-between",gap:12}}>
+                    <strong style={{color:"#000080"}}>{m.role==="user"?userName:"RP Vision AI"}</strong>
+                    <span>{new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span>
+                  </div>
+                  <div dangerouslySetInnerHTML={{__html:formatText(m.content)}}/>
+                  {m.role==="assistant" && (
+                    <div style={{marginTop:6,paddingTop:4,borderTop:"1px solid #d4d0c8",display:"flex",gap:6}}>
+                      <button className="win2k-button" onClick={()=>copy(m.content,i)} style={{fontSize:10,padding:"1px 8px"}}>
+                        {copied===i?"✓ Copied":"Copy"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Loading indicator */}
+            {loading && (
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",alignSelf:"flex-start"}}>
+                <div style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",...R,color:"#000080"}}>BOT</div>
+                <div style={{background:"#ffffff",borderTop:"2px solid #808080",borderLeft:"2px solid #808080",borderRight:"2px solid #ffffff",borderBottom:"2px solid #ffffff",padding:"8px 14px",display:"flex",gap:4,alignItems:"center",fontSize:11}}>
+                  <span style={{color:"#000080"}}>Processing</span>
+                  {[0,200,400].map((d,i)=>(
+                    <div key={i} style={{width:5,height:5,background:"#000080",borderRadius:"50%",animation:`win2k-dots 1.2s ease-in-out ${d}ms infinite`}}/>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+
+          {/* ── INPUT AREA ── */}
+          <div style={{padding:"6px 8px",borderTop:"2px solid #808080",background:"#d4d0c8",flexShrink:0}}>
+            <div style={{display:"flex",gap:6,alignItems:"flex-end"}}>
+              <div style={{flex:1,...INSET,padding:0,display:"flex",alignItems:"flex-end"}}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={e=>{ setInput(e.target.value); e.target.style.height="auto"; e.target.style.height=Math.min(e.target.scrollHeight,100)+"px"; }}
+                  onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+                  placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
+                  style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"Tahoma,'MS Sans Serif',Arial,sans-serif",fontSize:11,color:"#000000",padding:"4px 6px",resize:"none",lineHeight:1.5,height:22,maxHeight:100,overflowY:"auto",width:"100%"}}
+                />
+              </div>
+              <button className="win2k-button" onClick={()=>send()} disabled={loading||!input.trim()}
+                style={{padding:"5px 16px",fontSize:11,flexShrink:0,height:32,display:"flex",alignItems:"center",gap:4}}>
+                {loading?"Wait...":"Send ▶"}
+              </button>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:9,color:"#808080"}}>
+              <span>Press Enter to send · Shift+Enter for new line</span>
+              <span>Powered by {model.name} · Free</span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── RIGHT PANEL: Info ── */}
+        <div style={{width:160,display:"flex",flexDirection:"column",background:"#d4d0c8",borderLeft:"2px solid #808080",flexShrink:0}}>
+          <div style={{background:"linear-gradient(90deg,#000080,#1084d0)",color:"#ffffff",padding:"3px 6px",fontSize:11,fontWeight:"bold",flexShrink:0}}>
+            Properties
+          </div>
+          <div style={{padding:"6px",fontSize:11,flex:1,overflowY:"auto"}}>
+
+            <div className="win2k-groupbox">
+              <div className="win2k-groupbox-label">Connection</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:loading?"#ff8c00":"#00aa00",border:"1px solid #404040",flexShrink:0}}/>
+                <span>{loading?"Busy":"Online"}</span>
+              </div>
+              <div style={{color:"#808080",fontSize:9}}>Server: onrender.com</div>
+            </div>
+
+            <div className="win2k-groupbox">
+              <div className="win2k-groupbox-label">Model Info</div>
+              <div style={{fontSize:9,lineHeight:1.8,color:"#444444"}}>
+                <div><strong>Name:</strong></div>
+                <div style={{color:"#000080"}}>{model.name}</div>
+                <div style={{marginTop:4}}><strong>Speed:</strong></div>
+                <div>{model.badge}</div>
+                <div style={{marginTop:4}}><strong>Cost:</strong></div>
+                <div style={{color:"#008000"}}>Free</div>
+              </div>
+            </div>
+
+            <div className="win2k-groupbox">
+              <div className="win2k-groupbox-label">Session</div>
+              <div style={{fontSize:9,lineHeight:1.8,color:"#444444"}}>
+                <div><strong>Chats:</strong> {sessions.length}</div>
+                <div><strong>Messages:</strong> {msgs.length}</div>
+                <div><strong>User:</strong> {userName}</div>
+              </div>
+            </div>
+
+            <div className="win2k-groupbox">
+              <div className="win2k-groupbox-label">Quick Help</div>
+              <div style={{fontSize:9,lineHeight:1.8,color:"#444444"}}>
+                <div>• Enter = Send</div>
+                <div>• Shift+Enter = New line</div>
+                <div>• Click ✕ to delete chat</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      {/* ── STATUS BAR ── */}
+      <div className="win2k-statusbar">
+        <div className="win2k-statusbar-panel" style={{flex:1}}>
+          {loading?"Processing request...":msgs.length>0?`${msgs.length} messages in this conversation`:"Ready"}
+        </div>
+        <div className="win2k-statusbar-panel">
+          {model.name}
+        </div>
+        <div className="win2k-statusbar-panel">
+          {sessions.length} chat{sessions.length!==1?"s":""}
+        </div>
+        <div className="win2k-statusbar-panel" style={{minWidth:60,textAlign:"center"}}>
+          🌐 {timeStr}
         </div>
       </div>
 
       <style>{`
-        @keyframes dotBounce {
-          0%,60%,100%{transform:translateY(0);opacity:0.3}
-          30%{transform:translateY(-7px);opacity:1}
+        @keyframes win2k-dots {
+          0%,60%,100%{ transform:translateY(0); opacity:0.4; }
+          30%{ transform:translateY(-4px); opacity:1; }
         }
-        ::-webkit-scrollbar{display:none;}
       `}</style>
     </div>
   );
