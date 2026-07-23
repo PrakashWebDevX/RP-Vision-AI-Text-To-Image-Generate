@@ -490,3 +490,5 @@ export default function AIChat({ userName = "User" }) {
     </div>
   );
 }
+
+
